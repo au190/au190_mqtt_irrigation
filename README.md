@@ -16,7 +16,7 @@ Lovelace UI:<br />
 ```
 Number of maximum Zones is 6.
 Switching ON|OFF all the system. By swiching ON resetting all the logic do default.
-You can see the Zone numbers and set Zone Duration. 
+You can set Zone Duration. Number of Zones can be set in yaml. (Number of maximum Zones is 6.)
 Duration: Can be set from (12 sec - 18 hours).
 Each Zone can be enable or disabled. 
 If the Zone is disabled the Scheduler will skip that Zone on the aoutmatic irrigation. 
