@@ -14,7 +14,7 @@ Lovelace UI:<br />
 
 ### Irrigation system
 ```
-Maximum Zone number 6.
+Number of maximum Zones is 6.
 Switching ON|OFF all the system. By swiching ON resetting all the logic do default.
 You can see the Zone numbers and set Zone Duration. 
 Duration: Can be set from (12 sec - 18 hours).
@@ -36,7 +36,7 @@ At that specific time will run the automatic irrigation, for a duration spcified
 
 ### Md settings (Cat alarm)
 ```
-Maximum 3 motion detection input.
+Number of maximum motion detection is 3.
 Switching ON|OFF you can Enable|Disable Md settings.
 If you attach IR sensor or Md sensor you can trigger irrigation on a specific Zone.
 Md on time - irrigation will turn ON for this specific time. Duration: Can be set from (10 sec - 10 min).
