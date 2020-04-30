@@ -1,0 +1,27 @@
+# Describes the format for available switch services
+set_attr:
+  description: Toggles a switch state.
+  fields:
+    entity_id:
+      description: Name of entity.
+      example: 'switch.zone1'
+    start_time:
+      description: Time to start, in local time, in the 24-hour format "HH:MM"
+      example: "20:00:00"
+    duration:
+      description: How long it will run, 24-hour format "HH:MM".
+      example: "01:02"
+
+sw_zone:
+  description: Request Mqtt info.
+  fields:
+    entity_id:
+      description: Name of entity.
+      example: 'switch.zone1'
+
+get_info:
+  description: Request Mqtt info.
+  fields:
+    entity_id:
+      description: Name of entity.
+      example: 'switch.zone1'

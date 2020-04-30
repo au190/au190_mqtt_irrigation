@@ -1,0 +1,8 @@
+{
+  "domain": "au190_mqtt_irrigation",
+  "name": "Mqtt Irrigation",
+  "documentation": "https://github.com/au190?tab=projects",
+  "dependencies": ["mqtt"],
+  "codeowners": ["@au190"],
+  "requirements": []
+}
