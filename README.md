@@ -3,7 +3,7 @@
 
 You can use a lot of cool features for your Irrigation using just Homeassistant GUI.
 This component contains the server componenet and the client component.
-https://github.com/au190/https://github.com/au190/au190_mqtt_irrigation
+https://github.com/au190/au190_mqtt_irrigation
 
 
 **Example**
