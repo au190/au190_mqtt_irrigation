@@ -8,7 +8,7 @@ https://github.com/au190/https://github.com/au190/au190_mqtt_irrigation
 
 **Example**
 Lovelace UI:<br />
-<img src='https://raw.githubusercontent.com/au190/https://github.com/au190/au190_mqtt_irrigation/master/1.jpg'/>
+<img src='https://raw.githubusercontent.com/au190/au190_mqtt_irrigation/master/1.jpg'/>
 [![Watch the video](https://img.youtube.com/vi/-5QZi2_nNfk/0.jpg)](https://www.youtube.com/watch?v=-5QZi2_nNfk "Watch the video")
 
 
