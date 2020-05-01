@@ -51,7 +51,7 @@ If the Zone is triggerd 10 times in 5 minutes, it will be suspended until manual
 Switching ON|OFF you can Enable|Disable all the Protections or you can Enable|Disable one by one.
 MotorRunTout  - If the motor is running more then scecified, Irrigation system will be suspended until manual intervention(Switching ON|OFF all the system). Can be set from (60 sec - 18 hours).
 WaterLimTout  - If the water in the well ran out of water, Irrigation system will be suspended for the specified time, after that automaticaly return to normal wrok. Can be set from (60 sec - 18 hours).
-RainLimTout   - If rainy day, irrigation will be suspended for the specific time. (under consturvtion)
+RainLimTout   - If rainy day, irrigation will be suspended for the specific time. (under construction)
 ```
 
 
@@ -84,7 +84,7 @@ views	5
 
 #### Installation
 1.  Copy the au190_mqtt_irrigation dir into $homeassistant_config_dir/custom_components/ <br/>
-2.  To update the frontend use: https://github.com/au190/au190_homeassistant_frontend <br/>
+2.  To update the frontend use: https://github.com/au190/au190_homeassistant_frontend <br/> (Needs for popup menu)
 3.  Copy the au190-irrig_card dir into $homeassistant_config_dir/www/community/ <br/>
 
 
