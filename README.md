@@ -51,7 +51,7 @@ If the Zone is triggerd 10 times in 5 minutes, it will be suspended until manual
 Switching ON|OFF you can Enable|Disable all the Protections or you can Enable|Disable one by one.
 MotorRunTout  - If the motor is running more then scecified, Irrigation system will be suspended until manual intervention(Switching ON|OFF all the system). Can be set from (60 sec - 18 hours).
 WaterLimTout  - If the water in the well ran out of water, Irrigation system will be suspended for the specified time, after that automaticaly return to normal wrok. Can be set from (60 sec - 18 hours).
-RainLimTout   - If rainy day, irrigation will be suspended for the specific time. (under construction)
+RainLimTout   - If rainy day, automatic irrigation will be suspended for the specific time. This info can be set from weather station (OpenWeatherMap).
 ```
 
 
