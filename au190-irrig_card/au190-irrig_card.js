@@ -123,6 +123,7 @@ class au190_IrrigCard extends HTMLElement {
         enable_rainL: (this.stateObj.attributes.au190) ? this.stateObj.attributes.au190.enable_rainL : false,
         irrig_sys_status: (this.stateObj.attributes.au190) ? this.stateObj.attributes.au190.irrig_sys_status : false,
         waterLimLogic: (this.stateObj.attributes.au190) ? this.stateObj.attributes.au190.waterLimLogic : false,
+        rainLimLogic: (this.stateObj.attributes.au190) ? this.stateObj.attributes.au190.rainLimLogic : false,
         pow: (this.stateObj.attributes.au190) ? this.stateObj.attributes.au190.P : 0,
       }
       
@@ -138,6 +139,7 @@ class au190_IrrigCard extends HTMLElement {
         || this._old_state.enable_rainL !== new_state.enable_rainL
         || this._old_state.irrig_sys_status !== new_state.irrig_sys_status
         || this._old_state.waterLimLogic !== new_state.waterLimLogic
+        || this._old_state.rainLimLogic !== new_state.rainLimLogic
         || this._old_state.pow !== new_state.pow
 
       ){
@@ -221,7 +223,7 @@ class au190_IrrigCard extends HTMLElement {
         root.getElementById('i_'+i).removeAttribute("class");
       }
       
-      if((!this.stateObj.attributes.au190.enable_motorRunningToL || !this.stateObj.attributes.au190.enable_protection) && this.stateObj.attributes.au190.irrig_sys_status){
+      if(!this.stateObj.attributes.au190.enable_motorRunningToL || !this.stateObj.attributes.au190.enable_protection || !this.stateObj.attributes.au190.irrig_sys_status || !this.stateObj.attributes.au190.enable_irrig_sys){
         root.getElementById('i_0').classList.add('OFF');
       }else if(this.stateObj.attributes.au190.enable_motorRunningToL && this.stateObj.attributes.au190.irrig_sys_status){
         root.getElementById('i_0').classList.add('ON');
@@ -229,33 +231,32 @@ class au190_IrrigCard extends HTMLElement {
         root.getElementById('i_0').classList.add('err');
       }
 
-      if(!this.stateObj.attributes.au190.enable_waterL || !this.stateObj.attributes.au190.enable_protection){
+      if(!this.stateObj.attributes.au190.enable_waterL || !this.stateObj.attributes.au190.enable_protection || !this.stateObj.attributes.au190.irrig_sys_status || !this.stateObj.attributes.au190.enable_irrig_sys){
         root.getElementById('i_1').classList.add('OFF');
-      }else if(this.stateObj.attributes.au190.enable_waterL && !this.stateObj.attributes.au190.waterLimLogic){
+      }else if(!this.stateObj.attributes.au190.waterLimLogic){
         root.getElementById('i_1').classList.add('ON');
-      }else if(this.stateObj.attributes.au190.enable_waterL && this.stateObj.attributes.au190.waterLimLogic){
+      }else if(this.stateObj.attributes.au190.waterLimLogic){
         root.getElementById('i_1').classList.add('err');
       }
 
-      if(!this.stateObj.attributes.au190.enable_rainL || !this.stateObj.attributes.au190.enable_protection){
+      if(!this.stateObj.attributes.au190.enable_rainL || !this.stateObj.attributes.au190.enable_protection || !this.stateObj.attributes.au190.irrig_sys_status || !this.stateObj.attributes.au190.enable_irrig_sys){
         root.getElementById('i_2').classList.add('OFF');
-      }else if(this.stateObj.attributes.au190.enable_rainL){
+      }else if(!this.stateObj.attributes.au190.rainLimLogic){
         root.getElementById('i_2').classList.add('ON');
-      }else if(this.stateObj.attributes.au190.enable_rainL && this.stateObj.attributes.au190.enable_irrig_sys && !this.stateObj.attributes.au190.irrig_sys_status){
+      }else if(this.stateObj.attributes.au190.rainLimLogic){
         root.getElementById('i_2').classList.add('err');
       }
       
-      if(this.stateObj.attributes.au190.md_status[0] == 2 || this.stateObj.attributes.au190.md_status[1] == 2 || this.stateObj.attributes.au190.md_status[2] == 2 ){
+      
+      if(!this.stateObj.attributes.au190.enable_md || !this.stateObj.attributes.au190.irrig_sys_status || !this.stateObj.attributes.au190.enable_irrig_sys){
+        root.getElementById('i_3').classList.add('OFF');
+      }else if(this.stateObj.attributes.au190.md_status[0] == 2 || this.stateObj.attributes.au190.md_status[1] == 2 || this.stateObj.attributes.au190.md_status[2] == 2 ){
         root.getElementById('i_3').classList.add('err');
       }else{
-        if(!this.stateObj.attributes.au190.enable_md){
-          root.getElementById('i_3').classList.add('OFF');
-        }else if(this.stateObj.attributes.au190.enable_md){
-          root.getElementById('i_3').classList.add('ON');
-        }
+        root.getElementById('i_3').classList.add('ON');
       }
       
-      if(!this.stateObj.attributes.au190.enable_scheduler){
+      if(!this.stateObj.attributes.au190.enable_scheduler || !this.stateObj.attributes.au190.irrig_sys_status || !this.stateObj.attributes.au190.enable_irrig_sys){
         root.getElementById('i_4').classList.add('OFF');
       }else if(this.stateObj.attributes.au190.enable_scheduler){
         root.getElementById('i_4').classList.add('ON');

@@ -86,6 +86,7 @@ idx_WaterL  = 4                       #index of water Limit
 
 MOTOR_RUNNING_ON    = True
 WATER_LIMIT_ON      = True
+RAIN_LIMIT_ON       = True
 MD_ON               = 1
 
 MD_MAX_COUNT = 10                    # Max count the Md ON status in an interval of time
@@ -234,6 +235,7 @@ class Au190_MqttIrrigation(
 
             self._irrigation.update({"command_info": "cmnd/" + self.topic + "/Status"})
             self._irrigation.update({"state_topic": "stat/" + self.topic + "/#"})
+            self._irrigation.update({"tele_topic": "tele/" + self.topic + "/RESULT"})
 
             # Attr config
             self._attrs.update({"au190": {"type":2}})
@@ -272,7 +274,7 @@ class Au190_MqttIrrigation(
 
             self._irrigation.update({"au190": {}})                                  # Only those vaules where I need former value
 
-            self._irrigation["au190"]["WaterL_Fc"] = ""                             # List of callback Fc if != "" suspended WaterLim
+
 
             self._irrigation["au190"]['enable_irrig_sys'] = True                    # manual
             self._irrigation["au190"]['irrig_sys_status'] = True
@@ -291,9 +293,11 @@ class Au190_MqttIrrigation(
             self._irrigation["au190"]['scheduled_w_status'] = {"on": False, "fc_listener": ""}               #sche_w_status Scheduled watering status
 
             self._irrigation["au190"]["waterLim"] = False
-            self._irrigation["au190"]["rainLim"] = False
 
-            self._irrigation["au190"]["scheduler_fc"] = []                          #Holds the function list and the callback data
+            self._irrigation["au190"]["scheduler_Fc"] = []                          #Holds the function list and the callback data
+            self._irrigation["au190"]["WaterL_Fc"] = ""                             #List of callback Fc if != "" suspended WaterLim
+            self._irrigation["au190"]["RainL_Fc"] = ""                              #Holds the function list and the callback data
+            self._irrigation["au190"]["motorRunningToL_Fc"] = ""                    #Holds the function list and the callback data
 
             # Attr config
             self._attrs["au190"]['enable_irrig_sys'] = True                         # True or False, manual enable disable
@@ -308,9 +312,9 @@ class Au190_MqttIrrigation(
             self._attrs["au190"]["irrigdays"] = [True,True,True,True,True,True,True]#Irrigation days
 
             self._attrs["au190"]["waterLim"] = False
-            self._attrs["au190"]["waterLimLogic"] = False                           #Ater the sendor is on there is a timeout
+            self._attrs["au190"]["waterLimLogic"] = False                           #Ater the sendor is on there is a timeout, it shows the logical value, not the real sensor value
             self._attrs["au190"]["rainLim"] = False
-            self._attrs["au190"]["rainLimLogic"] = False                            #Ater the sendor is on there is a timeout
+            self._attrs["au190"]["rainLimLogic"] = False                            #Ater the sendor is on there is a timeout, it shows the logical value, not the real sensor value
             self._attrs["au190"]["motor"] = False
 
             self._attrs["au190"]["P"] = 0
@@ -380,8 +384,10 @@ class Au190_MqttIrrigation(
             }
 
         '''
-            if template exist   rerender 
-            if not exist        return the msg.payload
+            If no template return the original msg.payload
+            if template exist - rerender
+            
+            template - must be from config !!!
         '''
         def render_template(msg, template_name):
 
@@ -400,9 +406,10 @@ class Au190_MqttIrrigation(
             try:
                 _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
 
-                self._md_update_status(0, msg.payload)
-                asyncio.run_coroutine_threadsafe(self._md_logic(0), self.hass.loop)  # .result()
-
+                data = render_template(msg, CONF_MD_1_TEMPLATE)
+                if data != "":
+                    self._md_update_status(0, data)
+                    asyncio.run_coroutine_threadsafe(self._md_logic(0), self.hass.loop)  # .result()
 
             except Exception as e:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
@@ -414,9 +421,10 @@ class Au190_MqttIrrigation(
             try:
                 _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
 
-                self._md_update_status(1, msg.payload)
-                asyncio.run_coroutine_threadsafe(self._md_logic(1), self.hass.loop)  # .result()
-
+                data = render_template(msg, CONF_MD_2_TEMPLATE)
+                if data != "":
+                    self._md_update_status(1, data)
+                    asyncio.run_coroutine_threadsafe(self._md_logic(1), self.hass.loop)  # .result()
 
             except Exception as e:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
@@ -428,13 +436,13 @@ class Au190_MqttIrrigation(
             try:
                 _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
 
-                self._md_update_status(2, msg.payload)
-                asyncio.run_coroutine_threadsafe(self._md_logic(2), self.hass.loop)  # .result()
-
+                data = render_template(msg, CONF_MD_3_TEMPLATE)
+                if data != "":
+                    self._md_update_status(2, data)
+                    asyncio.run_coroutine_threadsafe(self._md_logic(2), self.hass.loop)  # .result()
 
             except Exception as e:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
 
         @callback
         def state_message_waterLim(msg):
@@ -445,7 +453,6 @@ class Au190_MqttIrrigation(
                 self._attrs["au190"]["waterLim"] = self.convToBool(msg.payload)
                 asyncio.run_coroutine_threadsafe(self._waterLim_logic(), self.hass.loop)  # .result()
 
-
             except Exception as e:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
@@ -454,11 +461,12 @@ class Au190_MqttIrrigation(
         def state_message_rainLim(msg):
             """Handle new MQTT state messages."""
             try:
-                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+                #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
 
-                self._attrs["au190"]["rainLim"] = self.convToBool(msg.payload)
-                asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)  # .result()
-
+                data = render_template(msg, CONF_RAIN_LIM_TEMPLATE)
+                if data != "":
+                    self._attrs["au190"]["rainLim"] = self.convToBool(data)
+                    asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)  # .result()
 
             except Exception as e:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
@@ -473,71 +481,81 @@ class Au190_MqttIrrigation(
                 self._attrs["au190"]["motor"] = self.convToBool(msg.payload)
                 asyncio.run_coroutine_threadsafe(self._motorRunningToL_logic(), self.hass.loop)  # .result()
 
-
             except Exception as e:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
 
         '''
-           If the state topic has template the message comes here
+           Topic message
+           "tele/" + self.topic + "/RESULT"
         '''
         @callback
-        def state_message_sensors(msg):
+        def tele_message_received(msg):
             """Handle new MQTT state messages."""
             try:
-                #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
 
-                data = render_template(msg, CONF_MD_1_TEMPLATE)
-                if data != "":
-                    self._md_update_status(0, data)
-                    asyncio.run_coroutine_threadsafe(self._md_logic(0), self.hass.loop)  # .result()
+                if self._config.get(CONF_MD_1) is None:
+                    data = render_template(msg, CONF_MD_1_TEMPLATE)
+                    if data != "":
+                        self._md_update_status(0, data)
+                        asyncio.run_coroutine_threadsafe(self._md_logic(0), self.hass.loop)  # .result()
 
-                data = render_template(msg, CONF_MD_2_TEMPLATE)
-                if data != "":
-                    self._md_update_status(1, data)
-                    asyncio.run_coroutine_threadsafe(self._md_logic(1), self.hass.loop)  # .result()
+                if self._config.get(CONF_MD_2) is None:
+                    data = render_template(msg, CONF_MD_2_TEMPLATE)
+                    if data != "":
+                        self._md_update_status(1, data)
+                        asyncio.run_coroutine_threadsafe(self._md_logic(1), self.hass.loop)  # .result()
 
-                data = render_template(msg, CONF_MD_3_TEMPLATE)
-                if data != "":
-                    self._md_update_status(2, data)
-                    asyncio.run_coroutine_threadsafe(self._md_logic(2), self.hass.loop)  # .result()
+                if self._config.get(CONF_MD_3) is None:
+                    data = render_template(msg, CONF_MD_3_TEMPLATE)
+                    if data != "":
+                        self._md_update_status(2, data)
+                        asyncio.run_coroutine_threadsafe(self._md_logic(2), self.hass.loop)  # .result()
 
-                data = render_template(msg, CONF_WATER_LIM_TEMPLATE)
-                if data != "":
-                    self._attrs["au190"]["waterLim"] = self.convToBool(data)
-                    asyncio.run_coroutine_threadsafe(self._waterLim_logic(), self.hass.loop)  # .result()
+                if self._config.get(CONF_WATER_LIM) is None:
+                    data = render_template(msg, CONF_WATER_LIM_TEMPLATE)
+                    if data != "":
+                        self._attrs["au190"]["waterLim"] = self.convToBool(data)
+                        asyncio.run_coroutine_threadsafe(self._waterLim_logic(), self.hass.loop)  # .result()
 
-                data = render_template(msg, CONF_RAIN_LIM_TEMPLATE)
-                if data != "":
-                    self._attrs["au190"]["rainLim"] = self.convToBool(data)
-                    asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)  # .result()
+                if self._config.get(CONF_RAIN_LIM) is None:
+                    data = render_template(msg, CONF_RAIN_LIM_TEMPLATE)
+                    if data != "":
+                        self._attrs["au190"]["rainLim"] = self.convToBool(data)
+                        asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)  # .result()
 
-                data = render_template(msg, CONF_MOTOR_TEMPLATE)
-                if data != "":
-                    self._attrs["au190"]["motor"] = self.convToBool(data)
+                if self._config.get(CONF_MOTOR) is None:
+                    data = render_template(msg, CONF_MOTOR_TEMPLATE)
+                    if data != "":
+                        self._attrs["au190"]["motor"] = self.convToBool(data)
 
-                    try:
-                        # ---    If irrig_sys_status is disabled fore the value to zero
-                        if (not self._irrigation["au190"]['enable_irrig_sys'] or not self._irrigation["au190"]['irrig_sys_status']):
+                        try:
+                            # ---    If irrig_sys_status is disabled fore the value to zero
+                            if (not self._irrigation["au190"]['enable_irrig_sys'] or not self._irrigation["au190"]['irrig_sys_status']):
 
-                            self._attrs["au190"]["motor"] = False
-                            self._attrs["au190"]["P"] = 0
+                                self._attrs["au190"]["motor"] = False
+                                self._attrs["au190"]["P"] = 0
 
-                        else:  # Update power data
+                            else:  # Update power data
 
-                            self._attrs["au190"]["P"]  = render_template(msg, CONF_P_TEMPLATE)
-                            self._attrs["au190"]["PD"] = render_template(msg, CONF_PD_TEMPLATE)
-                            #self._attrs["au190"]["PW"] = render_template(msg, "{{ value_json.PW }}")
-                            self._attrs["au190"]["PM"] = render_template(msg, CONF_PM_TEMPLATE)
-                            #self._attrs["au190"]["PY"] = render_template(msg, "{{ value_json.PY }}")
+                                self._attrs["au190"]["P"]  = render_template(msg, CONF_P_TEMPLATE)
+                                self._attrs["au190"]["PD"] = render_template(msg, CONF_PD_TEMPLATE)
+                                #self._attrs["au190"]["PW"] = render_template(msg, )
+                                self._attrs["au190"]["PM"] = render_template(msg, CONF_PM_TEMPLATE)
+                                #self._attrs["au190"]["PY"] = render_template(msg, )
 
-                    except Exception as e1:{}
+                        except Exception as e1:{}
 
-                    asyncio.run_coroutine_threadsafe(self._motorRunningToL_logic(), self.hass.loop)#.result()
+                        asyncio.run_coroutine_threadsafe(self._motorRunningToL_logic(), self.hass.loop)#.result()
 
             except Exception as e:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
+        '''
+            Topic message
+            "stat/" + self.topic + "/#"
+        '''
         @callback
         def state_message_received(msg):
             """Handle new MQTT state messages."""
@@ -598,13 +616,14 @@ class Au190_MqttIrrigation(
                                 2.  error motor running too long
                         '''
                         if payload == "ON":     #ok
+
                             self._attrs["au190"]['enable_irrig_sys'] = True
                             self._attrs["au190"]['irrig_sys_status'] = True
                             self._irrigation["au190"]['enable_irrig_sys'] = True
                             self._irrigation["au190"]['irrig_sys_status'] = True
 
                             #--------------------------------------------------------------------------------------------------------------------------------------
-                            #   Manual enable, reset all var to default
+                            #   Manual enable, reset all vars to default
                             #   Do not reset the attrs data that contains the sensor data - its automatically updated in every x min
                             #--------------------------------------------------------------------------------------------------------------------------------------
                             if self._irrigation["au190"]['disable_req'] == 1:   #Manual enable, reset all var to default
@@ -615,13 +634,14 @@ class Au190_MqttIrrigation(
 
                                 self._irrigation["au190"]["waterLim"] = False
                                 self._attrs["au190"]["waterLimLogic"] = False
-                                asyncio.run_coroutine_threadsafe(self._clear_WaterLFc(), self.hass.loop)  # .result()
+                                asyncio.run_coroutine_threadsafe(self._clear_WaterL_Fc(), self.hass.loop)  # .result()
 
-                                self._irrigation["au190"]["rainLim"] = False
+                                self._attrs["au190"]["rainLimLogic"] = False
+                                asyncio.run_coroutine_threadsafe(self._clear_RainL_Fc(), self.hass.loop)  # .result()
 
                                 asyncio.run_coroutine_threadsafe(self._motorRunningToL_logic(), self.hass.loop)  # .result()
                                 asyncio.run_coroutine_threadsafe(self._waterLim_logic(), self.hass.loop)  # .result()
-                                asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)  # .result()
+                                #asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)  # .result()
                                 #asyncio.run_coroutine_threadsafe(self._md_logic(0), self.hass.loop)  # .result()
                                 #asyncio.run_coroutine_threadsafe(self._md_logic(1), self.hass.loop)  # .result()
                                 #asyncio.run_coroutine_threadsafe(self._md_logic(2), self.hass.loop)  # .result()
@@ -638,6 +658,7 @@ class Au190_MqttIrrigation(
 
 
                         elif payload == "OFF": #nok
+
                             # update oly after its confiremd form the Mosquitto broker
                             if self._irrigation["au190"]['disable_req'] == 1:
                                 self._attrs["au190"]['enable_irrig_sys'] = False
@@ -653,37 +674,31 @@ class Au190_MqttIrrigation(
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
 
-
-        if self._config.get(CONF_MD_1) is not None and self._config.get(CONF_MD_1_TEMPLATE) is not None:
-            add_subscription(topics, self._config.get(CONF_MD_1), state_message_sensors)
-        elif self._config.get(CONF_MD_1) is not None:
+        '''
+        
+            Cannot use the same topic for multiple functions !!!
+            Use different topic definisions for each sensor !!!
+            
+        '''
+        if self._config.get(CONF_MD_1) is not None:
             add_subscription(topics, self._config.get(CONF_MD_1), state_message_md_1)
 
-        if self._config.get(CONF_MD_2) is not None and self._config.get(CONF_MD_2_TEMPLATE) is not None:
-            add_subscription(topics, self._config.get(CONF_MD_2), state_message_sensors)
-        elif self._config.get(CONF_MD_2) is not None:
+        if self._config.get(CONF_MD_2) is not None:
             add_subscription(topics, self._config.get(CONF_MD_2), state_message_md_2)
 
-        if  self._config.get(CONF_MD_3) is not None and self._config.get(CONF_MD_3_TEMPLATE) is not None:
-            add_subscription(topics, self._config.get(CONF_MD_3), state_message_sensors)
-        elif self._config.get(CONF_MD_3) is not None:
+        if self._config.get(CONF_MD_3) is not None:
             add_subscription(topics, self._config.get(CONF_MD_3), state_message_md_3)
 
-        if self._config.get(CONF_WATER_LIM) is not None and self._config.get(CONF_WATER_LIM_TEMPLATE) is not None:
-            add_subscription(topics, self._config.get(CONF_WATER_LIM), state_message_sensors)
-        elif self._config.get(CONF_WATER_LIM) is not None:
+        if self._config.get(CONF_WATER_LIM) is not None:
             add_subscription(topics, self._config.get(CONF_WATER_LIM), state_message_waterLim)
 
-        if  self._config.get(CONF_RAIN_LIM) is not None and self._config.get(CONF_RAIN_LIM_TEMPLATE) is not None:
-            add_subscription(topics, self._config.get(CONF_RAIN_LIM), state_message_sensors)
-        elif self._config.get(CONF_RAIN_LIM) is not None:
+        if self._config.get(CONF_RAIN_LIM) is not None:
             add_subscription(topics, self._config.get(CONF_RAIN_LIM), state_message_rainLim)
 
-        if  self._config.get(CONF_MOTOR) is not None and self._config.get(CONF_MOTOR_TEMPLATE) is not None:
-            add_subscription(topics, self._config.get(CONF_MOTOR), state_message_sensors)
-        elif self._config.get(CONF_MOTOR) is not None:
+        if self._config.get(CONF_MOTOR) is not None:
             add_subscription(topics, self._config.get(CONF_MOTOR), state_message_motor)
 
+        add_subscription(topics, self._irrigation["tele_topic"], tele_message_received)
         add_subscription(topics, self._irrigation["state_topic"], state_message_received)
 
         self._sub_state = await subscription.async_subscribe_topics(self.hass, self._sub_state, topics)
@@ -844,24 +859,25 @@ class Au190_MqttIrrigation(
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
+    '''
+        allways_on - If true, allways turn ON the zone (output)
+    '''
     async def _zone_on(self, id, pulsetime = -1, allways_on = False):
         _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s][%s]", id, pulsetime, allways_on)
 
-        if self._attrs["au190"]["irrigdays"][datetime.datetime.now().weekday()] or allways_on:
+        kwargs = {}
+        kwargs['zone'] = id
+        kwargs['pulsetime'] = pulsetime
+        kwargs['allways_on'] = allways_on
 
-            kwargs = {}
-            kwargs['zone'] = id
-            kwargs['pulsetime'] = pulsetime
-            kwargs['allways_on'] = allways_on
-
-            await self.async_my_turn_on(**kwargs)
+        await self.async_my_turn_on(**kwargs)
 
     async def _async_wake_up(self, acction_time):
         try:
             _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", acction_time)
 
             id = None
-            for entry in self._irrigation["au190"]["scheduler_fc"]:
+            for entry in self._irrigation["au190"]["scheduler_Fc"]:
 
                 start_time = entry['start_time']
 
@@ -870,8 +886,24 @@ class Au190_MqttIrrigation(
                     break
 
             if id != None:
-                await self._md_update_scheduled_on()
-                await self._zone_on(id)
+                '''
+                
+                  Automatic irrigation
+
+                  1.  If enable_irrig_sys and irrig_sys_status enabled
+                  1.  If spesific weekday and
+                  2.  If WaterL ok and
+                  3.  If RainL ok 
+                  
+                '''
+                if (self._irrigation["au190"]['enable_irrig_sys'] and self._irrigation["au190"]['irrig_sys_status'] and
+                    self._attrs["au190"]["irrigdays"][datetime.datetime.now().weekday()] and
+                    self._irrigation["au190"]["waterLim"] != WATER_LIMIT_ON and
+                    self._attrs["au190"]["rainLimLogic"] != RAIN_LIMIT_ON
+                ):
+                    await self._md_update_scheduled_on()
+                    await self._zone_on(id)
+
             else:
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: Invalid Time: [%s]", acction_time)
 
@@ -890,11 +922,11 @@ class Au190_MqttIrrigation(
 
 
             # --- Remove all scheduler listener
-            for entry in self._irrigation["au190"]["scheduler_fc"]:
+            for entry in self._irrigation["au190"]["scheduler_Fc"]:
                 #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]-- [%s]", fc_listener)
                 fc_listener = entry["fc_listener"]
                 fc_listener()
-            self._irrigation["au190"]["scheduler_fc"] = []
+            self._irrigation["au190"]["scheduler_Fc"] = []
 
             #--- Set scheduler for zones
             FMT = '%H:%M:%S'
@@ -922,7 +954,7 @@ class Au190_MqttIrrigation(
 
                             #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "] - [Zone%s][%s:%s:%s][%s]", (id+1), starttime.hour, starttime.minute, starttime.second, duration)
                             fc_listener = async_track_time_change(self.hass, self._async_wake_up, hour=starttime.hour, minute=starttime.minute, second=starttime.second)
-                            self._irrigation["au190"]["scheduler_fc"].append({"start_time": starttime, "id": id, "fc_listener": fc_listener})
+                            self._irrigation["au190"]["scheduler_Fc"].append({"start_time": starttime, "id": id, "fc_listener": fc_listener})
 
                             previous_id = id
 
@@ -1118,7 +1150,7 @@ class Au190_MqttIrrigation(
 
                 else:
 
-                    await self._clear_WaterLFc()
+                    await self._clear_WaterL_Fc()
                     duration = int(self._attrs["au190"]["waterLimTout"])
 
                     if duration < 60:
@@ -1142,7 +1174,7 @@ class Au190_MqttIrrigation(
         try:
             '''
               enable_rainL
-              rainLimTout = in secconds - min value 
+              rainLimTout = in secconds - min value 10
 
               1.  If enable_irrig_sys and irrig_sys_status enabled
               1.  If enabled enable_rainL and enable_protection and
@@ -1150,32 +1182,77 @@ class Au190_MqttIrrigation(
               3.  
             '''
             if (self._irrigation["au190"]['enable_irrig_sys'] and self._irrigation["au190"]['irrig_sys_status'] and
-                    self._attrs["au190"]["enable_rainL"] and self._attrs["au190"]["enable_protection"]
+                self._attrs["au190"]["enable_rainL"] and self._attrs["au190"]["enable_protection"]
             ):
-                None
+
+                #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> rainLim [%s][%s]", self._attrs["au190"]["rainLim"], self._attrs["au190"]["rainLimLogic"])
+
+                if(self._attrs["au190"]["rainLim"] == RAIN_LIMIT_ON):
+
+                    await self._clear_RainL_Fc()
+                    self._attrs["au190"]["rainLimLogic"] = self._attrs["au190"]["rainLim"]
+
+                elif (self._attrs["au190"]["rainLim"] != RAIN_LIMIT_ON and self._attrs["au190"]["rainLimLogic"] != RAIN_LIMIT_ON): #Everithing is ok
+
+                    None
+
+                elif(self._attrs["au190"]["rainLimLogic"] == RAIN_LIMIT_ON): #RainLim is ok now - lets start the timer
+
+                    await self._clear_RainL_Fc()
+
+                    duration = int(self._attrs["au190"]["rainLimTout"])
+                    if duration < 10:
+                        duration = 10
+
+                    starttime = datetime.datetime.now() + datetime.timedelta(seconds=duration)
+
+                    fc_listener = async_track_time_change(self.hass, self._RainL_ok(), hour=starttime.hour, minute=starttime.minute, second=starttime.second)
+                    self._irrigation["au190"]["rainLimTout"] = fc_listener
+
+                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###0### rainLim_countDown [%s]", self._attrs["au190"])
 
 
             self.myasync_write_ha_state()
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
+
     '''
 
     '''
     async def _clear_motorRunningToLFc(self):
-        if self._irrigation["au190"]["motorRunningToL_Fc"] != "":
-            fc_listener = self._irrigation["au190"]["motorRunningToL_Fc"]
-            fc_listener()
-            self._irrigation["au190"]["motorRunningToL_Fc"] = ""
+        try:
+            if self._irrigation["au190"]["motorRunningToL_Fc"] != "":
+                fc_listener = self._irrigation["au190"]["motorRunningToL_Fc"]
+                fc_listener()
+                self._irrigation["au190"]["motorRunningToL_Fc"] = ""
+
+        except Exception as e:
+            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
 
     '''
 
     '''
-    async def _clear_WaterLFc(self):
-        if self._irrigation["au190"]["WaterL_Fc"] != "":
-            fc_listener = self._irrigation["au190"]["WaterL_Fc"]
-            fc_listener()
-            self._irrigation["au190"]["WaterL_Fc"] = ""
+    async def _clear_RainL_Fc(self):
+        try:
+            if self._irrigation["au190"]["RainL_Fc"] != "":
+                fc_listener = self._irrigation["au190"]["RainL_Fc"]
+                fc_listener()
+                self._irrigation["au190"]["RainL_Fc"] = ""
+
+        except Exception as e:
+            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+    async def _clear_WaterL_Fc(self):
+        try:
+            if self._irrigation["au190"]["WaterL_Fc"] != "":
+                fc_listener = self._irrigation["au190"]["WaterL_Fc"]
+                fc_listener()
+                self._irrigation["au190"]["WaterL_Fc"] = ""
+
+        except Exception as e:
+            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
     '''
     
@@ -1207,7 +1284,7 @@ class Au190_MqttIrrigation(
                 if data == CONF_PAYLOAD_ON:
                     self._attrs["au190"]["waterLimLogic"] = False
 
-                await self._clear_WaterLFc()
+                await self._clear_WaterL_Fc()
 
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
@@ -1270,6 +1347,20 @@ class Au190_MqttIrrigation(
                 # turn off the Motor
                 await self._enable_Motor(CONF_PAYLOAD_OFF)
                 _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> ### Motor run too long !")
+
+    '''
+
+    '''
+    async def _RainL_ok(self):
+        try:
+            self._attrs["au190"]["rainLimLogic"] = not RAIN_LIMIT_ON #RainL is ok
+            self.myasync_write_ha_state()
+
+            await self._clear_RainL_Fc()
+
+            _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###1### rainLim_countDown ok [%s]", self._attrs["au190"])
+        except Exception as e:
+            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
 
     async def _load_from_file(self):
