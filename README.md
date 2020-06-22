@@ -121,10 +121,14 @@ configuration.yaml
 ```
 switch:
 
-#****************************  
-# 
-#****************************
 
+#****************************  
+#   zones_ids   - mqtt cmnd ids
+#   md_ids      - the index number from the zones_ids, rerender md inputs to zone (this array allways must have 3 element, I have 3 md input)
+#   Cannot use the same topic for multiple sensors !!! 
+#   When default hardware sendosr is used, do not use topic for md1, md2, md3, waterLim, rainLim, motor. If you want data from different topic then you can define.
+#   If the motor topic is form outside, one topic must be for all the (motor, power, power daily, power weekly) Ex: {"PowerData":"0","M":1,"P":509.84,"PD":13.14,"PW":13.14,"PM":13.14,"PY":13.14,"v":"13"}
+#****************************    
   - platform: au190_mqtt_irrigation
     name: "Irrigation"
     icon: mdi:power
@@ -132,17 +136,17 @@ switch:
     zones_ids: [1,2,3]
     md_ids: [1,2,3]
     
-    md1: "tele/irrig/RESULT"
+    #md1: "tele/irrig/RESULT"
     md1_value_template: "{{ value_json.md1 }}"
-    md2: "tele/irrig/RESULT"
+    #md2: "tele/irrig/RESULT"
     md2_value_template: "{{ value_json.md2 }}"
-    md3: "tele/irrig/RESULT"
+    md3: "tele/irrig/dummy_alarm"
     md3_value_template: "{{ value_json.md3 }}"
-    waterLim: "tele/irrig/RESULT"
+    #waterLim: "tele/irrig/RESULT"
     waterLim_value_template: "{{ value_json.waterLim }}"
-    rainLim: "tele/irrig/RESULT"
+    rainLim: "tele/irrig/precip"
     rainLim_value_template: "{{ value_json.rainLim }}"
-    motor: "tele/irrig/RESULT"
+    #motor: "tele/irrig/RESULT"
     motor_value_template: "{{ value_json.M }}"
     power_value_template: "{{ value_json.P }}"
     powdaily_value_template: "{{ value_json.PD }}"
@@ -152,6 +156,7 @@ switch:
     payload_available: "Online"
     payload_not_available: "Offline"
     qos: 1
+
 
 
 ```
