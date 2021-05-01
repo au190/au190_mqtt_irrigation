@@ -72,8 +72,7 @@ Python_version	3.7.5
 
 #### Installation
 1.  Copy the au190_mqtt_irrigation dir into $homeassistant_config_dir/custom_components/ <br/>
-2.  To update the frontend use: https://github.com/au190/au190_homeassistant_frontend <br/> (Needs for popup menu)
-3.  Copy the au190-irrig_card dir into $homeassistant_config_dir/www/community/ <br/>
+2.  Copy the au190-irrig_card dir into $homeassistant_config_dir/www/community/ <br/>
 
 
 #### 1. Server side configuration:
