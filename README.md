@@ -110,7 +110,7 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 
 In the yaml there are some dependent configuration if you are using *md_stat* in config you must define the *md_template* and *md_template*.
 
-The stat configuratons is allways the input for Iriggation logic. These values specified abowe. After the config allways check the logs, if some issue wiht the conifg you will find more info there.
+The stat configuratons is allways the input for Irrigation System logic. These values specified abowe. After the config allways check the logs, if some issue wiht the conifg you will find more info there.
 All the config is saved in the $homeassistant_config_dir/au190/ directory.
 If you chage the yaml config delete the $homeassistant_config_dir/au190/specific_device.json
 
