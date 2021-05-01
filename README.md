@@ -52,7 +52,7 @@ If the Zone is triggerd 10 times in 5 minutes, it will be suspended until manual
 Switching ON|OFF you can Enable|Disable all the Protections or you can Enable|Disable one by one.
 MotorRunTout  - This information is getting form the motor power consuption. If the motor is running more then scecified, Irrigation system will be suspended until manual intervention(Switching ON|OFF the system). Can be set from (60 sec - 18 hours).
 WaterLimTout  - If the water in the well ran out of water, Irrigation system will be suspended for the specified time, after that automaticaly return to normal wrok. Can be set from (60 sec - 18 hours).
-RainLimTout   - If rainy day, automatic irrigation will be suspended for the specific time. This info can be set from weather station (OpenWeatherMap).
+RainLimTout   - If rainy day, automatic irrigation will be suspended for the specific time. This info can be get from weather station (OpenWeatherMap).
 ```
 
 
@@ -62,8 +62,9 @@ RainLimTout   - If rainy day, automatic irrigation will be suspended for the spe
 - [ ] ⚠️ Working only with MQTT
 - [ ] ⚠️ Working only with Tasmota(https://github.com/arendst/Tasmota) software. 
 Tested:
+Home Assistant version: 0.105.1
 Tasmota v7.1.2
-Os: Ubuntu 19.10
+
 
 Homeassistant: 0.105.1
 System Health
