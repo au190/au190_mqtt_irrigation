@@ -3,6 +3,8 @@
 
 You can use a lot of cool features for your Irrigation using just Homeassistant GUI.
 This component contains the server componenet and the client component.
+You can use different sensors and switches, power meter, motion detection sensors, infra senzors, based on MQTT protocol. These sensors can can be conbined together in singel logic working as a Smart MQTT Irrigation System.
+Working with Tasmota software on the devices.
 https://github.com/au190/au190_mqtt_irrigation
 
 
@@ -14,12 +16,12 @@ Lovelace UI:<br />
 
 ### Irrigation system
 ```
-Number of maximum Zones is 6.
-Switching ON|OFF all the system. By swiching ON resetting all the logic do default.
-You can set Zone Duration. Number of Zones can be set in yaml. (Number of maximum Zones is 6.)
+Number of maximum Zones not limited. Number of Zones can be set in yaml.
+Switching ON|OFF the system. By swiching ON resetting all the logic do default.
+You can set Zone Duration. 
 Duration: Can be set from (12 sec - 18 hours).
 Each Zone can be enable or disabled. 
-If the Zone is disabled the Scheduler will skip that Zone on the aoutmatic irrigation. 
+If the Zone is disabled the Scheduler will skip that Zone on the autmatic irrigation. 
 If the Zone is enabled automatic irrigation will run on that Zone for that specific duration. 
 For the manual irrigation same duration is applied.
 ```
@@ -36,20 +38,20 @@ At that specific time will run the automatic irrigation, for a duration spcified
 
 ### Md settings (Cat alarm)
 ```
-Number of maximum motion detection is 3.
+Number of maximum motion detection is 6.
 Switching ON|OFF you can Enable|Disable Md settings.
 If you attach IR sensor or Md sensor you can trigger irrigation on a specific Zone.
 Md on time - irrigation will turn ON for this specific time. Duration: Can be set from (10 sec - 10 min).
 If there is no set Start time|End time allways will be active.
 You can specify Start time|End time when will be active.
-If the Zone is triggerd 10 times in 5 minutes, it will be suspended until manual intervention(Switching ON|OFF all the system).
+If the Zone is triggerd 10 times in 5 minutes, it will be suspended until manual intervention(Manual Switching ON|OFF all the system).
 ```
 
 ### Protection
 
 ```
 Switching ON|OFF you can Enable|Disable all the Protections or you can Enable|Disable one by one.
-MotorRunTout  - If the motor is running more then scecified, Irrigation system will be suspended until manual intervention(Switching ON|OFF all the system). Can be set from (60 sec - 18 hours).
+MotorRunTout  - This information is getting form the motor power consuption. If the motor is running more then scecified, Irrigation system will be suspended until manual intervention(Switching ON|OFF the system). Can be set from (60 sec - 18 hours).
 WaterLimTout  - If the water in the well ran out of water, Irrigation system will be suspended for the specified time, after that automaticaly return to normal wrok. Can be set from (60 sec - 18 hours).
 RainLimTout   - If rainy day, automatic irrigation will be suspended for the specific time. This info can be set from weather station (OpenWeatherMap).
 ```
@@ -102,16 +104,18 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 | name | string | optional |  |  
 | icon | string | optional | mdi:power |  
 | topic | string | **Required** | "irrig" |   Just use the mqtt topic here
-| zones_ids | string | **Required** | [1,2,3,4,5,6] |  These are the indexes of the mqtt messages, max number is 6. (mqtt cmnd ids)
-| md_ids | string | **Required** | [1,2,3] |  The index number from the zones_ids, rerender md inputs to zone (this array allways must have 3 element, I have 3 md input)
-| md1 | string | **Required** | "tele/irrig/RESULT" |  
-| md1_value_template | string | **Required** | "{{ value_json.md1 }}" |  I have special circuit serial - arduino.
-| waterLim | string | **Required** | "tele/irrig/RESULT" |  
-| rainLim_value_template | string | **Required** | "{{ value_json.waterLim }}" |   I have special circuit serial - arduino.
-| rainLim | string | optional | "tele/irrig/RESULT" |  
-| rainLim_value_template | string | optional | "{{ value_json.rainLim }}" |   I have special circuit serial - arduino.
-| motor | string | optional | "tele/irrig/RESULT" |   I have special circuit serial - arduino.
-| motor_value_template | string | optional | "{{ value_json.M }}"" |  I have special circuit serial - arduino.
+| z_cmnd | string | **Required** | [cmnd/irrig/POWER1] |  These are the command message for each zone.
+| z_stat | string | **Required** | [stat/irrig/POWER1] |  These are the status message for each zone.
+| md_stat | string | **Required** | "stat/irrig_test/md_1" |  
+| md_template | string | **Required** | "{{ value_json.md1 }}" |  If I have special json or "".
+| md_assign | string | **Required** | [1,2,3] |  The number in this array, maps Md number to Zone index. Rerender md inputs to zone (values in *md_assign* assignments have to be equal elements as in *md_stat*). The first number represents the Md1 activates that number of Zone.
+| m_cmnd | string | optional | "cmnd/irrig_test/POWER7" |   Motor command message.
+| m_stat | string | optional | "stat/irrig_test/POWER7" |   Motor status message.
+| m_template | string | optional | "{{ value_json.M }}"" |  If I have special json or "".
+| waterLim_stat | string | **Required** | "stat/irrig_test/POWER8" | 
+| waterLim_template | string | optional | "{{ value_json.rainLim }}" |   I have special circuit serial - arduino.
+| rainLim_stat | string | optional | "stat/irrig_test/precip" |  
+| rainLim_template | string | **Required** | "{{ value_json.waterLim }}" |   I have special circuit serial - arduino.
 | power_value_template | string | optional | "{{ value_json.P }}" |  I have special circuit serial - arduino.
 | powdaily_value_template | string | optional | "{{ value_json.PD }}" |  I have special circuit serial - arduino.
 | powmontly_value_template | string | optional | "{{ value_json.PM }}" |  I have special circuit serial - arduino.
@@ -122,40 +126,66 @@ configuration.yaml
 switch:
 
 
-#****************************  
-#   zones_ids   - mqtt cmnd ids
-#   md_ids      - the index number from the zones_ids, rerender md inputs to zone (this array allways must have 3 element, I have 3 md input)
-#   Cannot use the same topic for multiple sensors !!! 
-#   When default hardware sendosr is used, do not use topic for md1, md2, md3, waterLim, rainLim, motor. If you want data from different topic then you can define.
-#   If the motor topic is form outside, one topic must be for all the (motor, power, power daily, power weekly) Ex: {"PowerData":"0","M":1,"P":509.84,"PD":13.14,"PW":13.14,"PM":13.14,"PY":13.14,"v":"13"}
+#****************************
+#    
+#   Do not use the same topic in the configuration !!!
+#
+#   md_assign   - the index number from the z_cmnd, rerender md inputs to zone
 #****************************    
   - platform: au190_mqtt_irrigation
     name: "Irrigation"
     icon: mdi:power
-    topic: "irrig"
-    zones_ids: [1,2,3]
-    md_ids: [1,2,3]
+    z_cmnd: [
+    "cmnd/basic/POWER",
+    "cmnd/irrig_test/POWER1",
+    "cmnd/irrig_test/POWER2",
+    "cmnd/irrig_test/POWER3",
+    ]
+    z_stat: [
+    "stat/basic/POWER",
+    "stat/irrig_test/POWER1",
+    "stat/irrig_test/POWER2",
+    "stat/irrig_test/POWER3",
+    ]
+
+    md_stat: [
+    "stat/irrig_test/md_1",
+    "stat/irrig_test/md_2",
+    "stat/irrig_test/md_3",
+    "stat/irrig_test/md_4",
+    "stat/irrig_test/md_5",
+    "stat/irrig_test/md_6"
+    ]
+    md_template: [
+    "",
+    "{{ value_json.md2 }}",
+    "{{ value_json.md3 }}",
+    "",
+    "",
+    "",
+    ]
+    md_assign: [0,2,1,3,3,3]
     
-    #md1: "tele/irrig/RESULT"
-    md1_value_template: "{{ value_json.md1 }}"
-    #md2: "tele/irrig/RESULT"
-    md2_value_template: "{{ value_json.md2 }}"
-    md3: "tele/irrig/dummy_alarm"
-    md3_value_template: "{{ value_json.md3 }}"
-    #waterLim: "tele/irrig/RESULT"
-    waterLim_value_template: "{{ value_json.waterLim }}"
-    rainLim: "tele/irrig/precip"
-    rainLim_value_template: "{{ value_json.rainLim }}"
-    #motor: "tele/irrig/RESULT"
-    motor_value_template: "{{ value_json.M }}"
-    power_value_template: "{{ value_json.P }}"
-    powdaily_value_template: "{{ value_json.PD }}"
-    powmontly_value_template: "{{ value_json.PM }}"
+    m_cmnd: "cmnd/blitzwolf/POWER"
+    m_stat: "stat/blitzwolf/POWER"
+    #m_template: "{{ value_json.M }}"
     
-    availability_topic: "tele/irrig/LWT"
+    m_power_stat: "tele/blitzwolf/SENSOR"
+    m_power_template: "{{ value_json.ENERGY.Power }}"
+    m_powerdaily_template: "{{ value_json.ENERGY.Today }}"
+    m_powermonthly_template: "{{ value_json.ENERGY.Total }}"
+    
+    rainLim_stat: "tele/irrig_test/precip"
+    rainLim_template: "{{ value_json.rainLim }}"
+    
+    waterLim_stat: "stat/irrig_test/POWER8"
+    waterLim_template: "{{ value_json.waterLim }}"
+    
+    availability_topic: "tele/irrig_test/LWT"
     payload_available: "Online"
     payload_not_available: "Offline"
     qos: 1
+    
 
 
 
