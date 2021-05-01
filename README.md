@@ -116,9 +116,11 @@ All the config is saved in the $homeassistant_config_dir/au190/ directory.
 If you change the yaml configuration of this entity, delete the $homeassistant_config_dir/au190/switch.irrigation_data.json and restart the HA.
 
 
-Y
+
 
 **1 Basic config**
+
+1.  Sonoff 4CH with Tasmota software
 
 ```
 switch:
@@ -134,16 +136,16 @@ switch:
     name: "Irrigation"
     icon: mdi:power
     z_cmnd: [
-    "cmnd/basic/POWER",
     "cmnd/irrig/POWER1",
     "cmnd/irrig/POWER2",
     "cmnd/irrig/POWER3",
+    "cmnd/irrig/POWER4"
     ]
     z_stat: [
-    "stat/basic/POWER",
     "stat/irrig/POWER1",
     "stat/irrig/POWER2",
     "stat/irrig/POWER3",
+    "stat/irrig/POWER4",
     ]
     
     availability_topic: "tele/irrig/LWT"
@@ -202,8 +204,8 @@ switch:
     ]
     md_template: [
     "",
-    "{{ value_json.md2 }}",
-    "{{ value_json.md3 }}",
+    "",
+    "",
     "",
     "",
     "",
