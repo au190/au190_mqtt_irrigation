@@ -96,12 +96,10 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 | m_cmnd | string | optional |  |   Enable or disable power for the Motor.
 | m_stat | string | optional | ON or OFF |   Status message if the power is enabled or disabled for the Motor.
 | m_template | string | optional |  |  If I have special json or "".
-
 | m_power_stat | string | optional | int or float |  Power of the motor - form this info I know if the motor is runnin or not.
 | m_power_template | string | optional |  |  If I have special json or ""
 | m_powerdaily_template | string | optional |  |  If I have special json or ""
 | m_powermonthly_template | string | optional |  |  If I have special json or ""
-
 | waterLim_stat | string | optional | ON or OFF | 
 | waterLim_template | string | optional |  |   If I have special json or "".
 | rainLim_stat | string | optional | ON or OFF |  
