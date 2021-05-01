@@ -178,7 +178,7 @@ md_assign - The number in this array, maps Md number to Zone index. Rerender md 
 
 It depends on z_cmnd and md_stat.
 In the below example:
-The values in the md_assign can not be bigger then the number of (elements - 1) in z_cmnd. In this case 3 becasue we have 4 elements in z_cmnd.
+The values in the md_assign can not be bigger then the (number of elements - 1) in z_cmnd. In this case 3 becasue we have 4 elements in z_cmnd.
 The number of elemnts in md_assign must be equal to number of elemnts in md_stat.
 If the value is good you have to use empty string in template.
 
