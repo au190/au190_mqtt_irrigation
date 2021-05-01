@@ -110,9 +110,9 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 
 In the yaml there are some dependent configuration if you are using *md_stat* in config you must define the *md_template* and *md_template*.
 
-The stat configuratons is allways the input for Irrigation System logic. These values specified abowe. After the config allways check the logs, if some issue wiht the conifg you will find more info there.
+The stat configuratons is allways the input for Irrigation System logic. These values specified above. After the config allways check the logs, if some issue with the config you will find more info there.
 All the config is saved in the $homeassistant_config_dir/au190/ directory.
-If you chage the yaml config delete the $homeassistant_config_dir/au190/specific_device.json
+If you change the yaml config delete the $homeassistant_config_dir/au190/switch.irrigation_data.json
 
 **1 Basic config**
 
@@ -131,24 +131,24 @@ switch:
     icon: mdi:power
     z_cmnd: [
     "cmnd/basic/POWER",
-    "cmnd/irrig_test/POWER1",
-    "cmnd/irrig_test/POWER2",
-    "cmnd/irrig_test/POWER3",
+    "cmnd/irrig/POWER1",
+    "cmnd/irrig/POWER2",
+    "cmnd/irrig/POWER3",
     ]
     z_stat: [
     "stat/basic/POWER",
-    "stat/irrig_test/POWER1",
-    "stat/irrig_test/POWER2",
-    "stat/irrig_test/POWER3",
+    "stat/irrig/POWER1",
+    "stat/irrig/POWER2",
+    "stat/irrig/POWER3",
     ]
 
     md_stat: [
-    "stat/irrig_test/md_1",
-    "stat/irrig_test/md_2",
-    "stat/irrig_test/md_3",
-    "stat/irrig_test/md_4",
-    "stat/irrig_test/md_5",
-    "stat/irrig_test/md_6"
+    "stat/irrig/md_1",
+    "stat/irrig/md_2",
+    "stat/irrig/md_3",
+    "stat/irrig/md_4",
+    "stat/irrig/md_5",
+    "stat/irrig/md_6"
     ]
     md_template: [
     "",
@@ -169,17 +169,16 @@ switch:
     m_powerdaily_template: "{{ value_json.ENERGY.Today }}"
     m_powermonthly_template: "{{ value_json.ENERGY.Total }}"
     
-    rainLim_stat: "tele/irrig_test/precip"
-    rainLim_template: "{{ value_json.rainLim }}"
+    waterLim_stat: "stat/irrig/waterL"
+    #waterLim_template: "{{ value_json.waterLim }}"
     
-    waterLim_stat: "stat/irrig_test/POWER8"
-    waterLim_template: "{{ value_json.waterLim }}"
+    rainLim_stat: "tele/irrig/precip"
+    #rainLim_template: "{{ value_json.rainLim }}"
     
-    availability_topic: "tele/irrig_test/LWT"
+    availability_topic: "tele/irrig/LWT"
     payload_available: "Online"
     payload_not_available: "Offline"
     qos: 1
-    
 
 
 
