@@ -121,6 +121,8 @@ If you change the yaml configuration of this entity, delete the $homeassistant_c
 
 **1 Basic config**
 
+If you have more zones, you can add more Sonoff 4CH or any other MQTT device.
+
 1.  Sonoff 4CH with Tasmota software
 
 ```
