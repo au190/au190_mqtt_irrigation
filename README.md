@@ -111,11 +111,61 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 In the yaml there are some dependent configuration if you are using *md_stat* in config you must define the *md_template* and *md_template*.
 
 The stat configuratons is allways the input for Irrigation System logic. These values specified above. After the config allways check the logs, if some issue with the config you will find more info there.
+
 All the config is saved in the $homeassistant_config_dir/au190/ directory.
-If you change the yaml config delete the $homeassistant_config_dir/au190/switch.irrigation_data.json
+If you change the yaml configuration of this entity, delete the $homeassistant_config_dir/au190/switch.irrigation_data.json and restart the HA.
+
+
+Y
 
 **1 Basic config**
 
+```
+switch:
+
+
+#****************************
+#    
+#   Do not use the same topic in the configuration !!!
+#
+#   md_assign   - the index number from the z_cmnd, rerender md inputs to zone
+#****************************    
+  - platform: au190_mqtt_irrigation
+    name: "Irrigation"
+    icon: mdi:power
+    z_cmnd: [
+    "cmnd/basic/POWER",
+    "cmnd/irrig/POWER1",
+    "cmnd/irrig/POWER2",
+    "cmnd/irrig/POWER3",
+    ]
+    z_stat: [
+    "stat/basic/POWER",
+    "stat/irrig/POWER1",
+    "stat/irrig/POWER2",
+    "stat/irrig/POWER3",
+    ]
+    
+    availability_topic: "tele/irrig/LWT"
+    payload_available: "Online"
+    payload_not_available: "Offline"
+    qos: 1
+
+
+```
+
+
+**2 Full config**
+
+
+In this example Iam using 
+
+1.  Sonoff 4CH with Tasmota software
+2.  Sonoff basic with Tasmota software
+3.  Ir for Motion Detection with Tasmota software 
+4.  Enable disabel the power for the Motor ans also current cunsoption blitzwolf with Tasmota software
+
+(I have also dedicated hardware for all of this)
 ```
 switch:
 
@@ -179,7 +229,6 @@ switch:
     payload_available: "Online"
     payload_not_available: "Offline"
     qos: 1
-
 
 
 ```
