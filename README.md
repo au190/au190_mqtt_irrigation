@@ -3,7 +3,7 @@
 
 You can use a lot of cool features for your Irrigation using just Homeassistant GUI.
 This component contains the server componenet and the client component.
-You can use different sensors and switches, power meter, motion detection sensors, infra senzors, based on MQTT protocol. These sensors can can be conbined together in singel logic working as a Smart MQTT Irrigation System.
+You can use different sensors and switches, power meter, motion detection sensors, infra senzors, based on MQTT protocol. These sensors can be conbined together in a singel logic working as a Smart MQTT Irrigation System.
 Working with Tasmota software on the devices.
 https://github.com/au190/au190_mqtt_irrigation
 
@@ -19,7 +19,7 @@ Lovelace UI:<br />
 Number of maximum Zones not limited. Number of Zones can be set in yaml.
 Switching ON|OFF the system. By swiching ON resetting all the logic do default.
 You can set Zone Duration. 
-Duration: Can be set from (12 sec - 18 hours).
+Duration: Can be set from (10 sec - 18 hours).
 Each Zone can be enable or disabled. 
 If the Zone is disabled the Scheduler will skip that Zone on the autmatic irrigation. 
 If the Zone is enabled automatic irrigation will run on that Zone for that specific duration. 
@@ -42,8 +42,7 @@ Number of maximum motion detection is 6.
 Switching ON|OFF you can Enable|Disable Md settings.
 If you attach IR sensor or Md sensor you can trigger irrigation on a specific Zone.
 Md on time - irrigation will turn ON for this specific time. Duration: Can be set from (10 sec - 10 min).
-If there is no set Start time|End time allways will be active.
-You can specify Start time|End time when will be active.
+You can specify Start time|End time when will be active.If is not set the Start time|End time allways will be active.
 If the Zone is triggerd 10 times in 5 minutes, it will be suspended until manual intervention(Manual Switching ON|OFF all the system).
 ```
 
