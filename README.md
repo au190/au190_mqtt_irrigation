@@ -83,20 +83,20 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 
 **Options**
 
-| Name | Type | Default | Example | Description
+| Name | Type | Default | Values | Description
 | ---- | ---- | ------- | ----------- | -----------
 | platform | string | **Required** | `au190_mqtt_irrigation` |  
 | name | string | optional |  |  
 | icon | string | optional | mdi:power |  
-| z_cmnd | string | **Required** | [cmnd/irrig/POWER1] |  These are the commands for zones.
-| z_stat | string | **Required** | [stat/irrig/POWER1] |  These are the status message for zones.
-| md_stat | string | **Required** | "stat/irrig_test/md_1" |  These are the status message for md.
-| md_template | string | **Required** | "{{ value_json.md1 }}" |  If I have special json or "".
-| md_assign | string | **Required** | [1,2,3] |  The number in this array, maps Md number to Zone index. Rerender md inputs to zone (values in *md_assign* assignments have to be equal elements as in *md_stat*). The first number represents the Md1 activates that number of Zone.
-| m_cmnd | string | optional | "cmnd/irrig_test/POWER7" |   Motor command message.
-| m_stat | string | optional | "stat/irrig_test/POWER7" |   Motor status message.
-| m_template | string | optional | "{{ value_json.M }}"" |  If I have special json or "".
-| waterLim_stat | string | **Required** | "stat/irrig_test/POWER8" | 
+| z_cmnd | string | **Required** |  |  These are the commands for zones.
+| z_stat | string | **Required** | ON or OFF |  These are the status message for zones.
+| md_stat | string | **Required** | ON or OFF |  These are the status message for md.
+| md_template | string | **Required** |  |  If I have special json or "".
+| md_assign | string | **Required** |  |  The number in this array, maps Md number to Zone index. Rerender md inputs to zone (values in *md_assign* assignments have to be equal elements as in *md_stat*). The first number represents the Md1 activates that number of Zone.
+| m_cmnd | string | optional |  |   Enable or disable the Motor to the power.
+| m_stat | string | optional | ON or OFF |   Status message if the power is enabled or disabled for the Motor.
+| m_template | string | optional |  |  If I have special json or "".
+| waterLim_stat | string | **Required** | ON or OFF | 
 | waterLim_template | string | optional | "{{ value_json.rainLim }}" |   I have special circuit serial - arduino.
 | rainLim_stat | string | optional | "stat/irrig_test/precip" |  
 | rainLim_template | string | **Required** | "{{ value_json.waterLim }}" |   I have special circuit serial - arduino.
