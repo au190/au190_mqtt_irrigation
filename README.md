@@ -90,19 +90,23 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 | icon | string | optional | mdi:power |  
 | z_cmnd | string | **Required** |  |  These are the commands for zones.
 | z_stat | string | **Required** | ON or OFF |  These are the status message for zones.
-| md_stat | string | **Required** | ON or OFF |  These are the status message for md.
-| md_template | string | **Required** |  |  If I have special json or "".
-| md_assign | string | **Required** |  |  The number in this array, maps Md number to Zone index. Rerender md inputs to zone (values in *md_assign* assignments have to be equal elements as in *md_stat*). The first number represents the Md1 activates that number of Zone.
-| m_cmnd | string | optional |  |   Enable or disable the Motor to the power.
+| md_stat | string | optional | ON or OFF |  These are the status message for md.
+| md_template | string | optional |  |  If I have special json or "".
+| md_assign | string | optional |  |  The number in this array, maps Md number to Zone index. Rerender md inputs to zone (values in *md_assign* assignments have to be equal elements as in *md_stat*). The first number represents the Md1 activates that number of Zone.
+| m_cmnd | string | optional |  |   Enable or disable power for the Motor.
 | m_stat | string | optional | ON or OFF |   Status message if the power is enabled or disabled for the Motor.
 | m_template | string | optional |  |  If I have special json or "".
-| waterLim_stat | string | **Required** | ON or OFF | 
-| waterLim_template | string | optional | "{{ value_json.rainLim }}" |   I have special circuit serial - arduino.
-| rainLim_stat | string | optional | "stat/irrig_test/precip" |  
-| rainLim_template | string | **Required** | "{{ value_json.waterLim }}" |   I have special circuit serial - arduino.
-| power_value_template | string | optional | "{{ value_json.P }}" |  I have special circuit serial - arduino.
-| powdaily_value_template | string | optional | "{{ value_json.PD }}" |  I have special circuit serial - arduino.
-| powmontly_value_template | string | optional | "{{ value_json.PM }}" |  I have special circuit serial - arduino.
+
+| m_power_stat | string | optional | int or float |  Power of the motor - form this info I know if the motor is runnin or not.
+| m_power_template | string | optional |  |  If I have special json or ""
+| m_powerdaily_template | string | optional |  |  If I have special json or ""
+| m_powermonthly_template | string | optional |  |  If I have special json or ""
+
+| waterLim_stat | string | optional | ON or OFF | 
+| waterLim_template | string | optional |  |   If I have special json or "".
+| rainLim_stat | string | optional | ON or OFF |  
+| rainLim_template | string | optional |  |   If I have special json or ""
+
 
 configuration.yaml
 
