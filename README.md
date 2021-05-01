@@ -65,22 +65,6 @@ Tested:
 Home Assistant version: 0.105.1
 Tasmota v7.1.2
 
-
-Homeassistant: 0.105.1
-System Health
-arch	x86_64
-dev	false
-docker	false
-hassio	false
-os_name	Linux
-python_version	3.7.5
-timezone	Europe/Budapest
-version	0.105.1
-virtualenv	true
-Lovelace
-mode	storage
-resources	7
-views	5
 ```
 
 
