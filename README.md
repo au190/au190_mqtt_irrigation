@@ -263,9 +263,7 @@ switch:
 
 
 #### 2. Client side configuration:
-For the popup menu I had to create new fronted. You have to replace the with this: https://github.com/au190/au190_homeassistant_frontend
 
-#### 3. Client side configuration:
 Lovelace UI configuration
 
 ```
