@@ -88,7 +88,6 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 | platform | string | **Required** | `au190_mqtt_irrigation` |  
 | name | string | optional |  |  
 | icon | string | optional | mdi:power |  
-| topic | string | **Required** | "irrig" |   Just use the mqtt topic here
 | z_cmnd | string | **Required** | [cmnd/irrig/POWER1] |  These are the command message for each zone.
 | z_stat | string | **Required** | [stat/irrig/POWER1] |  These are the status message for each zone.
 | md_stat | string | **Required** | "stat/irrig_test/md_1" |  
