@@ -90,7 +90,7 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 | icon | string | optional | mdi:power |  
 | z_cmnd | string | **Required** | [cmnd/irrig/POWER1] |  These are the commands for zones.
 | z_stat | string | **Required** | [stat/irrig/POWER1] |  These are the status message for zones.
-| md_stat | string | **Required** | "stat/irrig_test/md_1" |  
+| md_stat | string | **Required** | "stat/irrig_test/md_1" |  These are the status message for md.
 | md_template | string | **Required** | "{{ value_json.md1 }}" |  If I have special json or "".
 | md_assign | string | **Required** | [1,2,3] |  The number in this array, maps Md number to Zone index. Rerender md inputs to zone (values in *md_assign* assignments have to be equal elements as in *md_stat*). The first number represents the Md1 activates that number of Zone.
 | m_cmnd | string | optional | "cmnd/irrig_test/POWER7" |   Motor command message.
