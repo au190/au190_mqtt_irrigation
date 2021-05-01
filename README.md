@@ -60,7 +60,8 @@ RainLimTout   - If rainy day, automatic irrigation will be suspended for the spe
 #### Info
 ```
 - [ ] ⚠️ Working only with MQTT
-- [ ] ⚠️ Working only with Tasmota(https://github.com/arendst/Tasmota) software. 
+- [ ] ⚠️ Working only with Tasmota(https://github.com/arendst/Tasmota) software.
+
 Tested:
 Home Assistant version: 0.105.1
 Tasmota v7.1.2
