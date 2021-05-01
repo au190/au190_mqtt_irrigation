@@ -78,8 +78,9 @@ Python_version	3.7.5
 #### 1. Server side configuration:
 
 Tasmota config:
+```
 Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; MqttUser user; MqttPassword mqtt_pw; DeviceName Irrigation; MqttClient Irrigation; Topic irrig; SetOption65 1; Setoption13 1; SerialLog 0; PowerOnState 0; GPIO4 22; GPIO5 21; GPIO12 24; GPIO13 35; GPIO14 25; GPIO15 23; GPIO16 26;
-
+```
 
 **Options**
 
@@ -180,16 +181,17 @@ The number of elemnts in md_assign must be equal to number of elemnts in md_stat
 If the value is good you have to use empty string in template.
 
 You can use the below config in Tasmota:
+```
 Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; MqttUser user; MqttPassword mqtt_pw; DeviceName Irrigation; MqttClient Irrigation; Topic irrig; SetOption65 1; Setoption13 1; SerialLog 0; PowerOnState 0; GPIO4 22; GPIO5 21; GPIO12 24; GPIO13 35; GPIO14 25; GPIO15 23; GPIO16 26;
-
+```
 
 You have to use rules for Motin detection.
-
+```
 Rule1 
 ON switch1#state=1 DO publish stat/irrig/md_1 OFF ENDON 
 ON switch1#state=0 DO publish stat/irrig/md_1 ON ENDON
 Rule1 1
-
+```
 
 
 ```
