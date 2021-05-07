@@ -85,7 +85,7 @@ Backlog Module 18; SSID1 Wifi_name; Password1 Wifi_pw; MqttHost 192.168.1.11; Mq
 
 **Options**
 
-| Name | Type | Default | Values | Description
+| Name | Type | Default | Accepted input values | Description
 | ---- | ---- | ------- | ----------- | -----------
 | platform | string | **Required** | `au190_mqtt_irrigation` |  
 | name | string | optional |  |  
