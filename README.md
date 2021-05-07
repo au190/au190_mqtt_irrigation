@@ -121,7 +121,7 @@ If you change the yaml configuration of this entity, delete the $homeassistant_c
 
 **1 Basic config**
 
-If you have more zones, you can add more Sonoff 4CH or any other MQTT device.
+If you have more zones, you can add more Sonoff 4CH or any other MQTT devices.
 
 1.  Sonoff 4CH with Tasmota software
 
@@ -178,6 +178,8 @@ In the below example:
 The values in the md_assign can not be bigger then the (number of elements - 1) in z_cmnd. In this case 3 becasue we have 4 elements in z_cmnd.
 The number of elemnts in md_assign must be equal to number of elemnts in md_stat.
 If the value is good you have to use empty string in template.
+
+You can assign multiple Md to the same zone.
 
 You can use the below config in Tasmota:
 ```
