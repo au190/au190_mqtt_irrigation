@@ -264,13 +264,20 @@ switch:
 
 Lovelace UI configuration
 
+
+Adding the resource to Client:
+
 ```
 resources:
 
   - type: module
     url: /local/community/au190-irrig_card/au190-irrig_card.js
+```
 
-    
+
+Card configuration:
+
+```    
   entity: switch.irrigation
   type: 'custom:au190-irrig_card'
 
