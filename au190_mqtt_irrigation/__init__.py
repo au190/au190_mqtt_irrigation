@@ -11,20 +11,10 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "au190_mqtt_irrigation"
 DATA_SERVICE_EVENT = "au190_service_idle"
-SERVICE_ATTRIBUTES = "set_attr"
-SERVICE_GET_INFO = "get_info"
-SERVICE_SWITCH_ZONES = "sw_zone"
+SERVICE_AU190= "au190_fc"
 
 ATTR_COUNT_DOWN = "countDown"
 ATTR_TIMERS = "timers"
-
-SONOS_JOIN_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
-        vol.Optional(ATTR_COUNT_DOWN): cv.positive_int,
-        vol.Optional(ATTR_TIMERS): vol.All(cv.time, cv.time),
-    }
-)
 
 async def async_setup(hass, config):
     """Set up the au190 component."""
@@ -47,10 +37,7 @@ async def async_setup(hass, config):
         async_dispatcher_send(hass, DOMAIN, service.service, service.data)
         await hass.data[DATA_SERVICE_EVENT].wait()
 
-    # hass.services.async_register(DOMAIN, SERVICE_TIMER, service_handle, schema=SONOS_JOIN_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_ATTRIBUTES, service_handle)
-    hass.services.async_register(DOMAIN, SERVICE_GET_INFO, service_handle)
-    hass.services.async_register(DOMAIN, SERVICE_SWITCH_ZONES, service_handle)
+    hass.services.async_register(DOMAIN, SERVICE_AU190, service_handle)
 
 
     return True

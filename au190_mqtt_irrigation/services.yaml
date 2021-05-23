@@ -1,6 +1,6 @@
 # Describes the format for available switch services
-set_attr:
-  description: Toggles a switch state.
+au190_fc:
+  description: Implementing Smart Irigation.
   fields:
     entity_id:
       description: Name of entity.
@@ -11,17 +11,3 @@ set_attr:
     duration:
       description: How long it will run, 24-hour format "HH:MM".
       example: "01:02"
-
-sw_zone:
-  description: Request Mqtt info.
-  fields:
-    entity_id:
-      description: Name of entity.
-      example: 'switch.zone1'
-
-get_info:
-  description: Request Mqtt info.
-  fields:
-    entity_id:
-      description: Name of entity.
-      example: 'switch.zone1'
