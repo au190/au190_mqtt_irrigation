@@ -165,8 +165,7 @@ In this example Iam using
 1.  WEMOS-D1-MINI with Tasmota software
 2.  Sonoff basic with Tasmota software
 3.  Ir for Motion Detection with Tasmota software 
-4.  Enable disabel the power for the Motor ans also current cunsoption blitzwolf with Tasmota software
-
+4.  Enable disable the power for the Motor and also measuring current consumption with blitzwolf device and Tasmota software.
 (I have also dedicated hardware for all of this)
 
 
