@@ -6,6 +6,7 @@ This component contains the server componenet and the client component.
 You can use different sensors and switches, power meter, motion detection sensors, infra senzors, based on MQTT protocol. These sensors can be conbined together in a singel logic working as a Smart MQTT Irrigation System.
 Working with Tasmota software on the devices.
 https://github.com/au190/au190_mqtt_irrigation
+Forum for questions, issues: https://community.home-assistant.io/t/dynamic-mqtt-irrigation-for-homeassistant/310401
 
 
 **Example**
