@@ -123,7 +123,7 @@ If you change the yaml configuration of this entity, delete the $homeassistant_c
 
 If you have more zones, you can add more Sonoff 4CH or any other MQTT devices.
 
-1.  Sonoff 4CH with Tasmota software
+1.  WEMOS-D1-MINI with Tasmota software
 
 ```
 switch:
@@ -162,7 +162,7 @@ switch:
 
 In this example Iam using 
 
-1.  Sonoff 4CH with Tasmota software
+1.  WEMOS-D1-MINI with Tasmota software
 2.  Sonoff basic with Tasmota software
 3.  Ir for Motion Detection with Tasmota software 
 4.  Enable disabel the power for the Motor ans also current cunsoption blitzwolf with Tasmota software
