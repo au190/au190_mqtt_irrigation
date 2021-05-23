@@ -23,7 +23,7 @@ Each Zone can be enable or disabled.
 If the Zone is disabled the Scheduler will skip that Zone on the autmatic irrigation. 
 If the Zone is enabled automatic irrigation will run on that Zone for that specific duration. 
 For the manual irrigation same duration is applied.
-```
+
 
 
 ### Scheduler
@@ -60,7 +60,6 @@ RainLimTout   - If rainy day, automatic irrigation will be suspended for the spe
 - [ ] ⚠️ The output will be ON only the time what is in configuraiton, even if the Ha is crashing druring the output is ON, or even if the Wifi router is crashing druring the output is ON.
 - [ ] ⚠️ Working only with MQTT
 - [ ] ⚠️ Working only with Tasmota(https://github.com/arendst/Tasmota) software.
-
 
 ```
 Tested:
