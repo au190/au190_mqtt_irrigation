@@ -64,9 +64,9 @@ RainLimTout   - If rainy day, automatic irrigation will be suspended for the spe
 
 ```
 Tested:
-Home Assistant version: 0.105.1
+Home Assistant version: 2021.9.7
+Python_version	3.9.7
 Tasmota v7.1.2
-Python_version	3.7.5
 
 ```
 
