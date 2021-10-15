@@ -1,47 +1,69 @@
-"""Support for MQTT irrigation."""
-import logging
-import sys
-import json
+import functools
 import voluptuous as vol
+import sys
+import logging
 import datetime
-import homeassistant.helpers.config_validation as cv
+import time
+import json
 import os
 import asyncio
 import pathlib
+from homeassistant.helpers.event import async_track_time_change
 
-from homeassistant.components import mqtt
-from homeassistant.components.switch import SwitchDevice
-from homeassistant.core import callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.typing import ConfigType, HomeAssistantType
-from homeassistant.helpers.event import (async_track_time_change)
+
+from homeassistant.components import switch
+from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import (
-    CONF_DEVICE,
-    CONF_ICON,
     CONF_NAME,
     CONF_OPTIMISTIC,
     CONF_PAYLOAD_OFF,
     CONF_PAYLOAD_ON,
 )
+from homeassistant.core import HomeAssistant, callback
+import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.reload import async_setup_reload_service
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.typing import ConfigType
+
 from homeassistant.components.mqtt import (
     CONF_COMMAND_TOPIC,
     CONF_QOS,
     CONF_RETAIN,
-    CONF_UNIQUE_ID,
-    Message,
-    MqttAttributes,
-    MqttDiscoveryUpdate,
-    MqttEntityDeviceInfo,
+    PLATFORMS,
     subscription,
 )
+from homeassistant.components import mqtt
+from homeassistant.components.mqtt.debug_info import log_messages
+from homeassistant.components.mqtt.mixins import (
+    MQTT_ENTITY_COMMON_SCHEMA,
+    MqttEntity,
+    async_setup_entry_helper,
+)
 
-from . import (
-    SERVICE_AU190,
-    DOMAIN
+MQTT_SWITCH_ATTRIBUTES_BLOCKED = frozenset(
+    {
+        switch.ATTR_CURRENT_POWER_W,
+        switch.ATTR_TODAY_ENERGY_KWH,
+    }
+)
+
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
 )
 
 _LOGGER = logging.getLogger(__name__)
+from . import DOMAIN, SERVICE_AU190
+
+
+JSON_FILE = "_data.json"
+JSON_DIR = "au190"
+
+DEFAULT_NAME = "au190 MQTT irrigation"
+DEFAULT_PAYLOAD_ON = "ON"
+DEFAULT_PAYLOAD_OFF = "OFF"
+DEFAULT_OPTIMISTIC = False
+CONF_STATE_ON = "state_on"
+CONF_STATE_OFF = "state_off"
 
 CONF_Z_CMND = "z_cmnd"
 CONF_Z_STAT = "z_stat"
@@ -68,23 +90,11 @@ CONF_RAINLIM_TEMPLATE = "rainLim_template"
 CONF_PAYLOAD_AVAILABLE = "payload_available"
 CONF_PAYLOAD_NOT_AVAILABLE = "payload_not_available"
 
-
-
-
-
-JSON_FILE = "_data.json"
-JSON_DIR = "au190"
-
-DEFAULT_NAME = "au190 MQTT irrigation"
-DEFAULT_PAYLOAD_ON = "ON"
-DEFAULT_PAYLOAD_OFF = "OFF"
-DEFAULT_OPTIMISTIC = False
 DEFAULT_PAYLOAD_AVAILABLE = "Online"
 DEFAULT_PAYLOAD_NOT_AVAILABLE = "Offline"
 
-
-MAX_MD_SENSOR       = 6                         # Max number of MD sensors that can be attached
-MD_MAX_COUNT        = 10                        # Max count of the Md ON status in an interval of time
+MAX_MD_SENSOR       = 6                         # Max, number of MD sensors that can be attached
+MD_MAX_COUNT        = 10                        # Max, count the Md ON status in an interval of time
 MD_TIME_INTERVAL    = 5                         # Count MD ON status in x min
 
 MOTOR_RUNNING_ON    = True
@@ -95,105 +105,96 @@ MD_ON               = True
 
 
 
-PLATFORM_SCHEMA = (
-    mqtt.MQTT_RW_PLATFORM_SCHEMA.extend(
-        {
-            vol.Optional(CONF_COMMAND_TOPIC): "",
-            vol.Optional(CONF_DEVICE): mqtt.MQTT_ENTITY_DEVICE_INFO_SCHEMA,
-            vol.Optional(CONF_ICON): cv.icon,
-            vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-            vol.Optional(CONF_OPTIMISTIC, default=DEFAULT_OPTIMISTIC): cv.boolean,
-            vol.Optional(CONF_PAYLOAD_OFF, default=DEFAULT_PAYLOAD_OFF): cv.string,
-            vol.Optional(CONF_PAYLOAD_ON, default=DEFAULT_PAYLOAD_ON): cv.string,
-            vol.Optional(CONF_UNIQUE_ID): cv.string,
+PLATFORM_SCHEMA = mqtt.MQTT_RW_PLATFORM_SCHEMA.extend(
+    {
+        vol.Optional(CONF_COMMAND_TOPIC): "",
+        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+        vol.Optional(CONF_OPTIMISTIC, default=DEFAULT_OPTIMISTIC): cv.boolean,
+        vol.Optional(CONF_PAYLOAD_OFF, default=DEFAULT_PAYLOAD_OFF): cv.string,
+        vol.Optional(CONF_PAYLOAD_ON, default=DEFAULT_PAYLOAD_ON): cv.string,
+        vol.Optional(CONF_STATE_OFF): cv.string,
+        vol.Optional(CONF_STATE_ON): cv.string,
 
-            vol.Required(CONF_Z_CMND, default=list): vol.All(cv.ensure_list, [cv.string]),
-            vol.Required(CONF_Z_STAT, default=list): vol.All(cv.ensure_list, [cv.string]),
+        vol.Required(CONF_Z_CMND, default=list): vol.All(cv.ensure_list, [cv.string]),
+        vol.Required(CONF_Z_STAT, default=list): vol.All(cv.ensure_list, [cv.string]),
 
-            vol.Optional(CONF_MD_STAT, default=list): vol.All(cv.ensure_list, [cv.string]),
-            vol.Optional(CONF_MD_TEMPLATE, default=list): vol.All(cv.ensure_list, [cv.template]),
-            vol.Optional(CONF_MD_ASSIGN, default=list): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional(CONF_MD_STAT, default=list): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional(CONF_MD_TEMPLATE, default=list): vol.All(cv.ensure_list, [cv.template]),
+        vol.Optional(CONF_MD_ASSIGN, default=list): vol.All(cv.ensure_list, [cv.string]),
 
-            vol.Optional(CONF_M_CMND): cv.string,
-            vol.Optional(CONF_M_STAT): cv.string,
-            vol.Optional(CONF_M_TEMPLATE): cv.template,
+        vol.Optional(CONF_M_CMND): cv.string,
+        vol.Optional(CONF_M_STAT): cv.string,
+        vol.Optional(CONF_M_TEMPLATE): cv.template,
 
-            vol.Optional(CONF_M_POWER_STAT): cv.string,
-            vol.Optional(CONF_M_POWER_TEMPLATE): cv.template,
-            vol.Optional(CONF_M_POWER_DAILY_TEMPLATE): cv.template,
-            vol.Optional(CONF_M_POWER_MONTHLY_TEMPLATE): cv.template,
+        vol.Optional(CONF_M_POWER_STAT): cv.string,
+        vol.Optional(CONF_M_POWER_TEMPLATE): cv.template,
+        vol.Optional(CONF_M_POWER_DAILY_TEMPLATE): cv.template,
+        vol.Optional(CONF_M_POWER_MONTHLY_TEMPLATE): cv.template,
 
-            vol.Optional(CONF_WATERLIM_STAT): cv.string,
-            vol.Optional(CONF_WATERLIM_TEMPLATE): cv.template,
+        vol.Optional(CONF_WATERLIM_STAT): cv.string,
+        vol.Optional(CONF_WATERLIM_TEMPLATE): cv.template,
 
-            vol.Optional(CONF_RAINLIM_STAT): cv.string,
-            vol.Optional(CONF_RAINLIM_TEMPLATE): cv.template,
+        vol.Optional(CONF_RAINLIM_STAT): cv.string,
+        vol.Optional(CONF_RAINLIM_TEMPLATE): cv.template,
 
-            vol.Optional(CONF_PAYLOAD_AVAILABLE, default=DEFAULT_PAYLOAD_AVAILABLE): cv.string,
-            vol.Optional(CONF_PAYLOAD_NOT_AVAILABLE, default=DEFAULT_PAYLOAD_NOT_AVAILABLE): cv.string,
+        vol.Optional(CONF_PAYLOAD_AVAILABLE, default=DEFAULT_PAYLOAD_AVAILABLE): cv.string,
+        vol.Optional(CONF_PAYLOAD_NOT_AVAILABLE, default=DEFAULT_PAYLOAD_NOT_AVAILABLE): cv.string,
 
-
-        }
-    )
-    .extend(mqtt.MQTT_JSON_ATTRS_SCHEMA.schema)
-)
+    }
+).extend(MQTT_ENTITY_COMMON_SCHEMA.schema)
 
 
+async def async_setup_platform(hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None):
+    """Set up MQTT switch through configuration.yaml."""
+    await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
+    await _async_setup_entity(hass, async_add_entities, config)
 
-async def async_setup_platform(  hass: HomeAssistantType, config: ConfigType, async_add_entities, discovery_info=None):
-    """Set up MQTT irrigation through configuration.yaml."""
-    await _async_setup_entity(hass, config, async_add_entities, discovery_info)
 
-async def _async_setup_entity(hass, config, async_add_entities, config_entry=None, discovery_hash=None):
-    """Set up the MQTT irrigation."""
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    """Set up MQTT switch dynamically through MQTT discovery."""
+    setup = functools.partial(_async_setup_entity, hass, async_add_entities, config_entry=config_entry)
+    await async_setup_entry_helper(hass, switch.DOMAIN, setup, PLATFORM_SCHEMA)
+
+
+async def _async_setup_entity(hass, async_add_entities, config, config_entry=None, discovery_data=None):
+    """Set up the MQTT switch."""
 
     devices = []
+    devices.append(Au190_MqttIrrigation(hass, config, config_entry, discovery_data))
+    async_add_entities(devices)
 
-    devices.append(Au190_MqttIrrigation(config, config_entry, discovery_hash))
-    async_add_entities(devices, True)
-
-    #- register Services
+    # - register Services
     async def async_service_get_data(service_name, service_data):
         """Handle the service call."""
         try:
             kwargs = dict(service_data)
-            entity_id = service_data.get('entity_id')
+            entity_id = service_data.get("entity_id")
 
             #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s][%s]", service_name, entity_id, kwargs)
 
             for device in devices:
-                if device.entity_id == entity_id :
-                    #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "] [%s][%s][%s]", device.entity_id, entity_id, kwargs)
+                if device.entity_id == entity_id:
+                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "] [%s][%s][%s]", device.entity_id, entity_id, kwargs)
                     if service_name == SERVICE_AU190:
                         await device.async_au190(**kwargs)
 
-
-
         except Exception as e:
-            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e) )
 
     async_dispatcher_connect(hass, DOMAIN, async_service_get_data)
 
 
-# pylint: disable=too-many-ancestors
-class Au190_MqttIrrigation(
-    MqttAttributes,
-    MqttDiscoveryUpdate,
-    MqttEntityDeviceInfo,
-    SwitchDevice,
-    RestoreEntity,
+class Au190_MqttIrrigation(MqttEntity, SwitchEntity, RestoreEntity):
+    """Representation of a switch that can be toggled using MQTT."""
 
-):
-    """Representation of a irrigation that can be toggled using MQTT."""
+    _attributes_extra_blocked = MQTT_SWITCH_ATTRIBUTES_BLOCKED
 
-    def __init__(self, config, config_entry, discovery_hash):
-        """Initialize the MQTT irrigation."""
+    def __init__(self, hass, config, config_entry, discovery_data):
+        """Initialize the MQTT switch."""
         self._state = False
-        self._sub_state = None
-        self._available = False
+        self.hass   = hass
 
-        self._unique_id = config.get(CONF_UNIQUE_ID)
-
+        # au190
         self.z_cmnd = config.get(CONF_Z_CMND)
         self.z_stat = config.get(CONF_Z_STAT)
 
@@ -205,34 +206,502 @@ class Au190_MqttIrrigation(
         self.md_assign = config.get(CONF_MD_ASSIGN)
         self.no_of_md = 0
 
-        # au190
         self.no_of_zones = len(self.z_cmnd)
         self._filename = None
 
         self._attrs = {}            #Holds the Config data from client saved in the file
         self._irrigation = {}       #Holds local data
 
-        # Load config
-        self._setup_from_config(config)
-        device_config = config.get(CONF_DEVICE)
+        MqttEntity.__init__(self, hass, config, config_entry, discovery_data)
 
-        MqttAttributes.__init__(self, config)
-        MqttDiscoveryUpdate.__init__(self, discovery_hash, self.discovery_update)
-        MqttEntityDeviceInfo.__init__(self, device_config, config_entry)
+    @staticmethod
+    def config_schema():
+        """Return the config schema."""
+        return PLATFORM_SCHEMA
 
-    async def async_added_to_hass(self):
-        """Subscribe to MQTT events."""
-        if await self._create_data():
-            await super().async_added_to_hass()
-            if await self._subscribe_topics():
-                await self._load_config()
-                attr = {}
-                attr["fc"] = 3
-                await self.async_au190(**attr)
+    @property
+    def is_on(self):
+        """Return true if device is on."""
+        return self._state
+
+    @property
+    def assumed_state(self):
+        """Return true if we do optimistic updates."""
+        return False
+
+    # ---------------------------------------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------------------------------------
+
+    def _publish(self, topic, payload):
+
+        #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s]", topic, payload)
+        try:
+            mqtt.async_publish(
+                self.hass,
+                topic,
+                payload,
+                self._config[CONF_QOS],
+                self._config[CONF_RETAIN],
+            )
+
+        except Exception as e:
+            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+    async def _subscribe_topics(self):
+        """(Re)Subscribe to topics."""
+
+        await self._create_data()
+        _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> %s [%s]", self.entity_id, self.name)
+
+        my_dir = self.hass.config.path(JSON_DIR)
+        self._filename = my_dir + os.sep + self.entity_id + JSON_FILE
+        if not os.path.exists(my_dir):
+            os.makedirs(my_dir)
+
+        await self._load_from_file()
+
+        topics = {}
+        qos = self._config[CONF_QOS]
+
+        def add_subscription(topics, topic, msg_callback):
+
+            if self.my_hasattr(topics, topic):
+                _LOGGER.fatal("[" + sys._getframe().f_code.co_name + "]--> [Yaml config is not good. This topic [%s] is aleardy assigned to a function. You have to use different topic for each sensor !]", topic)
+                return False
+
+            topics[topic] = {
+                "topic": topic,
+                "msg_callback": msg_callback,
+                "qos": qos,
+            }
+            return True
+
+        '''
+            If no template return the original msg.payload
+            if template exist - rerender
+
+            template - must be from config !!!
+        '''
+        def render_template(msg, template):
+            try:
+                if template is not None:
+
+                    template.hass = self.hass
+                    payload = template.async_render_with_possible_json_value(msg.payload, "")
+                else:
+                    payload = msg.payload
+
+                return payload
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+        def state_message_md(msg, idx):
+            """Handle new MQTT state messages."""
+            try:
+                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s] [%s]", idx, msg)
+
+                t_template = self.md_template[idx]
+                if t_template.template == "":
+                    t_template = None
+
+                data = render_template(msg, t_template)
+
+                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
+
+                    if self._attrs["au190"]["md_status"][idx] != "error":
+                        self._attrs["au190"]["md_status"][idx] = self.convToBool(data)
+                        asyncio.run_coroutine_threadsafe(self._md_logic(idx), self.hass.loop)
+
+                else:
+                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [md_template: %s] not good !]", msg, self.md_template[idx])
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+        @callback
+        def state_message_md_0(msg):
+            _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s] [%s]", 0, msg)
+            state_message_md(msg, 0)
+
+        @callback
+        def state_message_md_1(msg):
+            state_message_md(msg, 1)
+
+        @callback
+        def state_message_md_2(msg):
+            state_message_md(msg, 2)
+
+        @callback
+        def state_message_md_3(msg):
+            state_message_md(msg, 3)
+
+        @callback
+        def state_message_md_4(msg):
+            state_message_md(msg, 4)
+
+        @callback
+        def state_message_md_5(msg):
+            state_message_md(msg, 5)
+
+        '''
+            State topic POWER for zones
+
+            stat/irrig_test/POWER1 = ON
+        '''
+        @callback
+        def state_message_zone(msg):
+            try:
+                payload = msg.payload
+                topic = msg.topic
+                #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s][%s]", topic, payload, msg)
+                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+
+                idx = self.getListIdx("state_topics", topic)  # stat/irrig/POWER1
+
+                if idx >= 0 and idx < self.no_of_zones:  # On Off Zones
+
+                    self._attrs["au190"]["status"][idx] = payload
+                    self.myasync_write_ha_state()
+                    #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]zone_%s [%s]", idx, self._attrs["au190"]["status"])
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+        '''
+           State topic PulseTime for zones
+
+           stat/basic/RESULT = {"PulseTime1":{"Set":220,"Remaining":220}}
+
+        '''
+        @callback
+        def state_message_pulsetime(msg):
+            """Handle new MQTT state messages."""
+            try:
+                #payload = msg.payload
+                topic = msg.topic
+                pL_o = {}
+                # _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s][%s]", topic, payload, msg)
+
+                if msg.payload[0] == "{":  # is json ?
+
+                    pL_o = json.loads(msg.payload)  # decode json data
+                    first_element = list(pL_o.keys())[0]
+                    first_elementidx = topic + '/' + first_element
+
+                    if self.getListIdx("state_pulse_times_idx", first_elementidx) >= 0:
+
+                        _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+
+                        idx = self.getListIdx("state_pulse_times_idx", first_elementidx)
+                        self._irrigation["au190"]["pulsetime"][idx] = pL_o[first_element]["Set"]
+
+                        '''
+                            Send turn ON msg to the zone
+                        '''
+                        self._publish(self._irrigation["command_topics"][idx], self._config[CONF_PAYLOAD_ON])
+                        self.myasync_write_ha_state()
+                        # _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]-x- [%s][%s]", idx, payload)
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+        '''
+            Enable Disable the motor
+
+        '''
+        @callback
+        def state_message_enable_motor(msg):
+            """Handle new MQTT state messages."""
+            try:
+                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+
+                data = render_template(msg, self._config.get(CONF_M_TEMPLATE))
+
+                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
+
+                    if data == DEFAULT_PAYLOAD_ON:
+                        self._attrs["au190"]['irrig_sys_status'] = 1
+                    elif self._attrs["au190"]['irrig_sys_status'] == 1:
+                        self._attrs["au190"]['irrig_sys_status'] = 0
+
+                    asyncio.run_coroutine_threadsafe(self._irrigation_system(), self.hass.loop)
+                else:
+                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_TEMPLATE, self._config.get(CONF_M_TEMPLATE))
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+        '''
+            Motor ON or OFF
+            If the motor is running I get that info form the motor current consumption.
+
+            Accepting float or int values
+        '''
+        @callback
+        def state_message_motor_power(msg):
+            """Handle new MQTT state messages."""
+            try:
+                #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+
+                data = render_template(msg, self._config.get(CONF_M_POWER_TEMPLATE))
+
+                if self.is_number(data): # Must be number
+
+                    data = float(data)
+                    self._attrs["au190"]["P"] = data
+
+                    if  data >= 100: # x WATT
+                        self._attrs["au190"]["motorPower"] = True
+                    else:
+                        self._attrs["au190"]["motorPower"] = False
+
+                    asyncio.run_coroutine_threadsafe(self._motorRunningToL_logic(), self.hass.loop)
+
+                else:
+                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_POWER_TEMPLATE, self._config.get(CONF_M_POWER_TEMPLATE))
+
+                '''
+
+                '''
+                if self._config.get(CONF_M_POWER_DAILY_TEMPLATE) is not None:
+                    data = render_template(msg, self._config.get(CONF_M_POWER_DAILY_TEMPLATE))
+
+                    if self.is_number(data):  # Must be number
+
+                        self._attrs["au190"]["PD"] = float(data)
+
+                    else:
+                        _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_POWER_DAILY_TEMPLATE, self._config.get(CONF_M_POWER_DAILY_TEMPLATE))
+
+                '''
+
+                '''
+                if self._config.get(CONF_M_POWER_MONTHLY_TEMPLATE) is not None:
+                    data = render_template(msg, self._config.get(CONF_M_POWER_MONTHLY_TEMPLATE))
+
+                    if self.is_number(data):  # Must be number
+
+                        self._attrs["au190"]["PM"] = float(data)
+
+                    else:
+                        _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_POWER_MONTHLY_TEMPLATE, self._config.get(CONF_M_POWER_MONTHLY_TEMPLATE))
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+        @callback
+        def state_message_waterLim(msg):
+            """Handle new MQTT state messages."""
+            try:
+                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+
+                data = render_template(msg, self._config.get(CONF_WATERLIM_TEMPLATE))
+
+                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
+                    self._attrs["au190"]["waterLim"] = self.convToBool(data)
+                    asyncio.run_coroutine_threadsafe(self._waterLim_logic(), self.hass.loop)
+                else:
+                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_WATERLIM_TEMPLATE, self._config.get(CONF_WATERLIM_TEMPLATE))
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+
+        @callback
+        def state_message_rainLim(msg):
+            """Handle new MQTT state messages."""
+            try:
+                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+
+                data = render_template(msg, self._config.get(CONF_RAINLIM_TEMPLATE))
+
+                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
+                    self._attrs["au190"]["rainLim"] = self.convToBool(data)
+                    asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)
+                else:
+                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_RAINLIM_TEMPLATE, self._config.get(CONF_RAINLIM_TEMPLATE))
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+
+        @callback
+        def state_message_info(msg):
+            """Handle new MQTT state messages."""
+            '''
+            12:53:44 MQT: stat/basic/STATUS = {"Status":{"Module":1,"FriendlyName":["Basic"],"Topic":"basic","ButtonTopic":"0","Power":0,"PowerOnState":0,"LedState":1,"LedMask":"FFFF","SaveData":1,"SaveState":1,"SwitchTopic":"0","SwitchMode":[1,0,0,0,0,0,0,0],"ButtonRetain":0,"SwitchRetain":0,"SensorRetain":0,"PowerRetain":0}}
+            12:53:44 MQT: stat/basic/STATUS1 = {"StatusPRM":{"Baudrate":115200,"GroupTopic":"tasmotas","OtaUrl":"http://thehackbox.org/tasmota/release/tasmota.bin","RestartReason":"Power on","Uptime":"0T03:18:43","StartupUTC":"2021-05-03T08:35:01","Sleep":50,"CfgHolder":4621,"BootCount":12,"SaveCount":324,"SaveAddress":"F8000"}}
+            12:53:44 MQT: stat/basic/STATUS2 = {"StatusFWR":{"Version":"7.2.0(tasmota)","BuildDateTime":"2020-02-10T18:26:43","Boot":31,"Core":"2_6_1","SDK":"2.2.2-dev(5ab15d1)","Hardware":"ESP8266EX","CR":"273/1151"}}
+            12:53:45 MQT: stat/basic/STATUS3 = {"StatusLOG":{"SerialLog":2,"WebLog":2,"MqttLog":0,"SysLog":0,"LogHost":"","LogPort":514,"SSId":["Roby",""],"TelePeriod":300,"Resolution":"558180C0","SetOption":["0000A009","2805C8000100060000005A00000000000000","00008000","00000000"]}}
+            12:53:45 MQT: stat/basic/STATUS4 = {"StatusMEM":{"ProgramSize":594,"Free":344,"Heap":23,"ProgramFlashSize":1024,"FlashSize":1024,"FlashChipId":"14405E","FlashMode":3,"Features":["00000809","8FDAE397","003683A0","22B617CD","01001BC0","00007881"],"Drivers":"1,2,3,4,5,6,7,8,9,10,12,16,18,19,20,21,22,24,26,29","Sensors":"1,2,3,4,5,6,7,8,9,10,14,15,17,18,20,22,26,34"}}
+            12:53:45 MQT: stat/basic/STATUS5 = {"StatusNET":{"Hostname":"basic-5911","IPAddress":"192.168.2.45","Gateway":"192.168.2.1","Subnetmask":"255.255.255.0","DNSServer":"192.168.2.190","Mac":"B4:E6:2D:3A:B7:17","Webserver":2,"WifiConfig":4}}
+            12:53:45 MQT: stat/basic/STATUS6 = {"StatusMQT":{"MqttHost":"192.168.2.190","MqttPort":1883,"MqttClientMask":"Basic","MqttClient":"Basic","MqttUser":"au190","MqttCount":1,"MAX_PACKET_SIZE":1000,"KEEPALIVE":30}}
+            12:53:45 MQT: stat/basic/STATUS7 = {"StatusTIM":{"UTC":"Mon May 03 11:53:45 2021","Local":"Mon May 03 12:53:45 2021","StartDST":"Sun Mar 28 02:00:00 2021","EndDST":"Sun Oct 31 03:00:00 2021","Timezone":"+01:00","Sunrise":"05:25","Sunset":"20:08"}}
+            12:53:45 MQT: stat/basic/STATUS10 = {"StatusSNS":{"Time":"2021-05-03T12:53:45"}}
+            12:53:45 MQT: stat/basic/STATUS11 = {"StatusSTS":{"Time":"2021-05-03T12:53:45","Uptime":"0T03:18:44","UptimeSec":11924,"Heap":24,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"POWER":"OFF","Wifi":{"AP":1,"SSId":"Roby","BSSId":"84:16:F9:D3:3C:80","Channel":2,"RSSI":64,"Signal":-68,"LinkCount":1,"Downtime":"0T00:00:06"}}}
+
+            12:55:13 MQT: tele/basic/STATE = {"Time":"2021-05-03T12:55:13","Uptime":"0T03:20:12","UptimeSec":12012,"Heap":24,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"POWER":"OFF","Wifi":{"AP":1,"SSId":"Roby","BSSId":"84:16:F9:D3:3C:80","Channel":2,"RSSI":60,"Signal":-70,"LinkCount":1,"Downtime":"0T00:00:06"}}
+
+            # My special hardware
+            15:54:21 --> {"topic":"stat/x1/STATUS0","Time":"2021-09-26T15:54:22","Uptime":"00T00:00:19","SSId":"Roby","Ip":"192.168.2.155","RSSI":66}
+
+            '''
+            #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+            try:
+                if msg.payload[0] == "{":
+                    pL_o = json.loads(msg.payload)  # decode json data
+
+                    if self.my_hasattr_Idx(pL_o, 'StatusNET'):
+
+                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
+                        self._attrs['i'][t_topic].update({'IpAddress': pL_o['StatusNET']['IPAddress']})
+
+                    elif self.my_hasattr_Idx(pL_o, 'StatusSTS'):
+
+                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
+                        self._attrs['i'][t_topic].update({'SSId': pL_o['StatusSTS']['Wifi']['SSId'] + " (" + str(pL_o['StatusSTS']['Wifi']['RSSI']) + "%)"})
+                        self._attrs['i'][t_topic].update({'Uptime': pL_o['StatusSTS']['Uptime']})
+                        self._attrs['i'][t_topic].update({'Time': pL_o['StatusSTS']['Time']})
+
+                    elif self.my_hasattr_Idx(pL_o, 'Wifi'):
+
+                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
+                        self._attrs['i'][t_topic].update({'SSId': pL_o['Wifi']['SSId'] + " (" + str(pL_o['Wifi']['RSSI']) + "%)"})
+                        self._attrs['i'][t_topic].update({'Uptime': pL_o['Uptime']})
+                        self._attrs['i'][t_topic].update({'Time': pL_o['Time']})
+
+                    elif self.my_hasattr_Idx(pL_o, 'Ip'):# My special hardware
+
+                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
+                        self._attrs['i'][t_topic].update({'IpAddress': pL_o['Ip']})
+                        self._attrs['i'][t_topic].update({'SSId': pL_o['SSId'] + " (" + str(pL_o['RSSI']) + "%)"})
+                        self._attrs['i'][t_topic].update({'Uptime': pL_o['Uptime']})
+                        self._attrs['i'][t_topic].update({'Time': pL_o['Time']})
+
+
+                    self.myasync_write_ha_state()
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+
+        @callback
+        def state_message_available(msg):
+            '''
+                tele/basic/LWT = Online (retained)
+            '''
+            _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
+            try:
+
+                if msg.payload == self._config[CONF_PAYLOAD_AVAILABLE]:
+                    t_topic = self.conv_power_to_pulseTime(3, msg.topic)
+                    self._attrs['i'][t_topic].update({'available': True})
+                elif msg.payload == self._config[CONF_PAYLOAD_NOT_AVAILABLE]:
+                    t_topic = self.conv_power_to_pulseTime(3, msg.topic)
+                    self._attrs['i'][t_topic].update({'available': False})
+
+
+                self._attrs['_state'] = True #State of the Irrigation
+                for item in self._attrs['i']:
+                    #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "] [%s][%s]", item, self._attrs['i'][item]['available'])
+
+                    if self.my_hasattr_Idx(self._attrs['i'][item], 'available'):
+                        if not self._attrs['i'][item]['available']:
+                            self._attrs['_state'] = False
+
+                            t_topic = item
+                            self._attrs['i'][t_topic].update({'IpAddress': 'Unavailable'})
+                            self._attrs['i'][t_topic].update({'SSId': 'Unavailable'})
+                            self._attrs['i'][t_topic].update({'Uptime': 'Unavailable'})
+                            self._attrs['i'][t_topic].update({'Time': 'Unavailable'})
+
+
+                self.myasync_write_ha_state()
+
+            except Exception as e:
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
+
+
+
+
+        '''
+        --------------------------------------------------------------------------------------------------------------------------------------
+
+            Set listeners
+
+            Cannot use the same topic for multiple functions !!!
+
+        --------------------------------------------------------------------------------------------------------------------------------------
+        '''
+
+        for item in self._irrigation["state_topics"]:
+            if not add_subscription(topics, item, state_message_zone):
+                return False
+
+        for item in self._irrigation["state_pulse_times"]:
+            if not add_subscription(topics, item, state_message_pulsetime):
+                return False
+
+        for idx in range(self.no_of_md):
+            item = self.md_stat[idx]
+            fc = eval("state_message_md_"+ str(idx))
+            if not add_subscription(topics, item, fc):
+                return False
+
+        if self.m_stat is not None:
+            if not add_subscription(topics, self.m_stat, state_message_enable_motor):
+                return False
+
+        if self._config.get(CONF_M_POWER_STAT) is not None:
+            if not add_subscription(topics, self._config.get(CONF_M_POWER_STAT), state_message_motor_power):
+                return False
+
+
+        if self._config.get(CONF_WATERLIM_STAT) is not None:
+            if not add_subscription(topics, self._config.get(CONF_WATERLIM_STAT), state_message_waterLim):
+                return False
+
+        if self._config.get(CONF_RAINLIM_STAT) is not None:
+            if not add_subscription(topics, self._config.get(CONF_RAINLIM_STAT), state_message_rainLim):
+                return False
+
+
+        for item in self._irrigation["state_info"]:
+            add_subscription(topics, item, state_message_info)
+
+
+        for item in self._irrigation["state_available"]:
+            add_subscription(topics, item, state_message_available)
+
+
+
+        self._sub_state = await subscription.async_subscribe_topics(self.hass, self._sub_state, topics)
+
+        '''
+            Init data
+
+            1.  Do not turn off the System (PulseTime = 0)
+            2.  Get the System actual status
+            3.  Get the IP of the Tasmota devices
+
+        '''
+        if self.m_stat is not None:
+            tmsg = self.conv_power_to_pulseTime(2, self.m_cmnd)
+            self._publish(tmsg, 0)              #Send the pulsetime = 0, allways on
+            self._publish(self.m_cmnd, "")      #Get the status
+
+        for item in self._irrigation["command_info"]:
+            self._publish(item, 0)
+
+        return True
+
 
     '''
-    
-    
+
+
     '''
     async def _create_data(self):
         try:
@@ -283,18 +752,18 @@ class Au190_MqttIrrigation(
                 state_list.append(self.z_stat[idx])
 
                 '''
-                    Command PulseTime is working with cmnd/basic/PulseTime1 
-                    
+                    Command PulseTime is working with cmnd/basic/PulseTime1
+
                     10:21:38 CMD: PulseTime 10
                     10:21:38 MQT: stat/basic/RESULT = {"PulseTime1":{"Set":10,"Remaining":10}}
-                
+
                 '''
                 cmnd_pulseTime = self.z_cmnd[idx].replace("POWER", "PulseTime")
                 command_pulseTime_list.append(cmnd_pulseTime)
 
                 '''
                     PulseTime payload message
-                    
+
                     Calculate events msg for PulseTime  -> stat/basic/RESULT = {"PulseTime1":{"Set":220,"Remaining":220}}
                     Calculate events msg for Info       -> tele/irrig_test/STATE
                 '''
@@ -323,11 +792,15 @@ class Au190_MqttIrrigation(
 
                     state_info: 'stat/basic/STATUS5'
                     state_info: 'stat/basic/STATUS11'
-                    
+
                     state_info: tele/basic/STATE
                 '''
                 state_info = command_info.replace("cmnd", "stat")
-                state_info = state_info.replace("Status", "STATUS5")
+                state_info = state_info.replace("Status", "STATUS0") # My special hardware
+                if state_info not in state_info_list:
+                    state_info_list.append(state_info)
+
+                state_info = state_info.replace("STATUS0", "STATUS5")
                 if state_info not in state_info_list:
                     state_info_list.append(state_info)
 
@@ -349,7 +822,7 @@ class Au190_MqttIrrigation(
 
                 '''
                     Stat available event message.
-                    
+
                     tele/basic/LWT
                 '''
                 state_info = 'tele/' + t_topic + '/LWT'
@@ -360,7 +833,7 @@ class Au190_MqttIrrigation(
                 # Attr config
                 attr_status_list.append(DEFAULT_PAYLOAD_OFF)
                 attr_enable_zone_list.append(False)
-                attr_pulsetime_list.append(400)
+                attr_pulsetime_list.append(-1) # Force to update at the first time
                 #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s] [%s][%s]", idx, self.z_cmnd[idx], self.z_stat[idx])
 
 
@@ -372,14 +845,14 @@ class Au190_MqttIrrigation(
             self._irrigation.update({"state_pulse_times": state_pulseTime_list})            # Calculate events msg subscribe for.
             self._irrigation.update({"state_pulse_times_idx": state_pulseTime_list_idx})    # Calculate events msg. Need to get the correct idx form the pulsetime event
             self._irrigation.update({"state_info": state_info_list})                        # Calculate events msg for info.
-            self._irrigation.update({"state_available": state_available_list})  # Calculate events msg for info.
+            self._irrigation.update({"state_available": state_available_list})              # Calculate events msg for info.
 
 
             self._irrigation.update({"au190": {}})                                  # Only those vaules where I need former value
 
             self._irrigation["au190"]['irrig_sys_status'] = 1                       # 0 off, 1 On, 2 err motor running too long, 3 - waterLim suspended
 
-            self._irrigation["au190"].update({"pulsetime": attr_pulsetime_list})    # Pulstime from the device, this walue is already set and confirmed
+            self._irrigation["au190"].update({"pulsetime": attr_pulsetime_list})    # Pulstime from the device, this value is already set and confirmed
 
 
             self._irrigation["au190"]["enable_md"]  = False
@@ -455,517 +928,23 @@ class Au190_MqttIrrigation(
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
             return False
 
-    async def discovery_update(self, discovery_payload):
-        """Handle updated discovery message."""
-        config = PLATFORM_SCHEMA(discovery_payload)
-        self._setup_from_config(config)
-        await self.attributes_discovery_update(config)
-        await self.availability_discovery_update(config)
-        await self.device_info_discovery_update(config)
-        if await self._subscribe_topics():
-            self.async_write_ha_state()
-
-    def _setup_from_config(self, config):
-        """(Re)Setup the entity."""
-        self._config = config
-
-    async def _subscribe_topics(self):
-        """(Re)Subscribe to topics."""
-
-        _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s] [%s]", self.entity_id, self.name)
-
-        my_dir = self.hass.config.path(JSON_DIR)
-        self._filename = my_dir + os.sep + self.entity_id + JSON_FILE
-        if not os.path.exists(my_dir):
-            os.makedirs(my_dir)
-
-        topics = {}
-        qos = self._config[CONF_QOS]
-
-
-        def add_subscription(topics, topic, msg_callback):
-
-            if self.my_hasattr(topics, topic):
-                _LOGGER.fatal("[" + sys._getframe().f_code.co_name + "]--> [Yaml config is not good. This topic [%s] is aleardy assigned to a function. You have to use different topic for each sensor !]", topic)
-                return False
-
-            topics[topic] = {
-                "topic": topic,
-                "msg_callback": msg_callback,
-                "qos": qos,
-            }
-            return True
-        '''
-            If no template return the original msg.payload
-            if template exist - rerender
-            
-            template - must be from config !!!
-        '''
-        def render_template(msg, template):
-            try:
-                if template is not None:
-
-                    template.hass = self.hass
-                    payload = template.async_render_with_possible_json_value(msg.payload, "")
-                else:
-                    payload = msg.payload
-
-                return payload
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-
-        def state_message_md(msg, idx):
-            """Handle new MQTT state messages."""
-            try:
-                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s] [%s]", idx, msg)
-
-                t_template = self.md_template[idx]
-                if t_template.template == "":
-                    t_template = None
-
-                data = render_template(msg, t_template)
-
-                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
-
-                    if self._attrs["au190"]["md_status"][idx] != "error":
-                        self._attrs["au190"]["md_status"][idx] = self.convToBool(data)
-                        asyncio.run_coroutine_threadsafe(self._md_logic(idx), self.hass.loop)
-
-                else:
-                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [md_template: %s] not good !]", msg, self.md_template[idx])
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-
-        @callback
-        def state_message_md_0(msg):
-            state_message_md(msg, 0)
-
-        @callback
-        def state_message_md_1(msg):
-            state_message_md(msg, 1)
-
-        @callback
-        def state_message_md_2(msg):
-            state_message_md(msg, 2)
-
-        @callback
-        def state_message_md_3(msg):
-            state_message_md(msg, 3)
-
-        @callback
-        def state_message_md_4(msg):
-            state_message_md(msg, 4)
-
-        @callback
-        def state_message_md_5(msg):
-            state_message_md(msg, 5)
-
-
-        '''
-            State topic POWER for zones
-            
-            stat/irrig_test/POWER1 = ON
-        '''
-        @callback
-        def state_message_zone(msg):
-            try:
-                payload = msg.payload
-                topic = msg.topic
-                #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s][%s]", topic, payload, msg)
-                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-
-                idx = self.getListIdx("state_topics", topic)  # stat/irrig/POWER1
-
-                if idx >= 0 and idx < self.no_of_zones:  # On Off Zones
-
-                    self._attrs["au190"]["status"][idx] = payload
-                    self.myasync_write_ha_state()
-                    #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]zone_%s [%s]", idx, self._attrs["au190"]["status"])
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-        '''
-           State topic PulseTime for zones
-
-           stat/basic/RESULT = {"PulseTime1":{"Set":220,"Remaining":220}}
-
-        '''
-        @callback
-        def state_message_pulsetime(msg):
-            """Handle new MQTT state messages."""
-            try:
-                payload = msg.payload
-                topic = msg.topic
-                pL_o = {}
-                # _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s][%s]", topic, payload, msg)
-
-                if msg.payload[0] == "{":  # is json ?
-
-                    pL_o = json.loads(msg.payload)  # decode json data
-                    first_element = list(pL_o.keys())[0]
-                    first_elementidx = topic + '/' + first_element
-
-                    if self.getListIdx("state_pulse_times_idx", first_elementidx) >= 0:
-
-                        _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-
-                        idx = self.getListIdx("state_pulse_times_idx", first_elementidx)
-                        self._irrigation["au190"]["pulsetime"][idx] = pL_o[first_element]["Set"]
-
-                        '''
-                            Send turn ON msg to the zone
-                        '''
-                        self._publish(self._irrigation["command_topics"][idx], self._config[CONF_PAYLOAD_ON])
-                        self.myasync_write_ha_state()
-                        # _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]-x- [%s][%s]", idx, payload)
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-        '''
-            Enable Disable the motor
-            
-        '''
-        @callback
-        def state_message_enable_motor(msg):
-            """Handle new MQTT state messages."""
-            try:
-                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-
-                data = render_template(msg, self._config.get(CONF_M_TEMPLATE))
-
-                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
-
-                    if data == DEFAULT_PAYLOAD_ON:
-                        self._attrs["au190"]['irrig_sys_status'] = 1
-                    elif self._attrs["au190"]['irrig_sys_status'] == 1:
-                        self._attrs["au190"]['irrig_sys_status'] = 0
-
-                    asyncio.run_coroutine_threadsafe(self._irrigation_system(), self.hass.loop)
-                else:
-                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_TEMPLATE, self._config.get(CONF_M_TEMPLATE))
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-        '''
-            Motor ON or OFF
-            If the motor is running I get that info form the motor current consumption.
-            
-            Accepting float or int values
-        '''
-        @callback
-        def state_message_motor_power(msg):
-            """Handle new MQTT state messages."""
-            try:
-                #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-
-                data = render_template(msg, self._config.get(CONF_M_POWER_TEMPLATE))
-
-                if self.is_number(data): # Must be number
-
-                    data = float(data)
-                    self._attrs["au190"]["P"] = data
-
-                    if  data >= 100: # x WATT
-                        self._attrs["au190"]["motorPower"] = True
-                    else:
-                        self._attrs["au190"]["motorPower"] = False
-
-                    asyncio.run_coroutine_threadsafe(self._motorRunningToL_logic(), self.hass.loop)
-
-                else:
-                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_POWER_TEMPLATE, self._config.get(CONF_M_POWER_TEMPLATE))
-
-                '''
-                
-                '''
-                if self._config.get(CONF_M_POWER_DAILY_TEMPLATE) is not None:
-                    data = render_template(msg, self._config.get(CONF_M_POWER_DAILY_TEMPLATE))
-
-                    if self.is_number(data):  # Must be number
-
-                        self._attrs["au190"]["PD"] = float(data)
-
-                    else:
-                        _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_POWER_DAILY_TEMPLATE, self._config.get(CONF_M_POWER_DAILY_TEMPLATE))
-
-                '''
-                
-                '''
-                if self._config.get(CONF_M_POWER_MONTHLY_TEMPLATE) is not None:
-                    data = render_template(msg, self._config.get(CONF_M_POWER_MONTHLY_TEMPLATE))
-
-                    if self.is_number(data):  # Must be number
-
-                        self._attrs["au190"]["PM"] = float(data)
-
-                    else:
-                        _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_M_POWER_MONTHLY_TEMPLATE, self._config.get(CONF_M_POWER_MONTHLY_TEMPLATE))
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-        @callback
-        def state_message_waterLim(msg):
-            """Handle new MQTT state messages."""
-            try:
-                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-
-                data = render_template(msg, self._config.get(CONF_WATERLIM_TEMPLATE))
-
-                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
-                    self._attrs["au190"]["waterLim"] = self.convToBool(data)
-                    asyncio.run_coroutine_threadsafe(self._waterLim_logic(), self.hass.loop)
-                else:
-                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_WATERLIM_TEMPLATE, self._config.get(CONF_WATERLIM_TEMPLATE))
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-
-        @callback
-        def state_message_rainLim(msg):
-            """Handle new MQTT state messages."""
-            try:
-                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-
-                data = render_template(msg, self._config.get(CONF_RAINLIM_TEMPLATE))
-
-                if data == DEFAULT_PAYLOAD_ON or data == DEFAULT_PAYLOAD_OFF:
-                    self._attrs["au190"]["rainLim"] = self.convToBool(data)
-                    asyncio.run_coroutine_threadsafe(self._rainLim_logic(), self.hass.loop)
-                else:
-                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> [msg: %s][Yaml config is not good. Template configuration [%s: %s] not good !]", msg, CONF_RAINLIM_TEMPLATE, self._config.get(CONF_RAINLIM_TEMPLATE))
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-
-        @callback
-        def state_message_info(msg):
-            """Handle new MQTT state messages."""
-            '''
-            12:53:44 MQT: stat/basic/STATUS = {"Status":{"Module":1,"FriendlyName":["Basic"],"Topic":"basic","ButtonTopic":"0","Power":0,"PowerOnState":0,"LedState":1,"LedMask":"FFFF","SaveData":1,"SaveState":1,"SwitchTopic":"0","SwitchMode":[1,0,0,0,0,0,0,0],"ButtonRetain":0,"SwitchRetain":0,"SensorRetain":0,"PowerRetain":0}}
-            12:53:44 MQT: stat/basic/STATUS1 = {"StatusPRM":{"Baudrate":115200,"GroupTopic":"tasmotas","OtaUrl":"http://thehackbox.org/tasmota/release/tasmota.bin","RestartReason":"Power on","Uptime":"0T03:18:43","StartupUTC":"2021-05-03T08:35:01","Sleep":50,"CfgHolder":4621,"BootCount":12,"SaveCount":324,"SaveAddress":"F8000"}}
-            12:53:44 MQT: stat/basic/STATUS2 = {"StatusFWR":{"Version":"7.2.0(tasmota)","BuildDateTime":"2020-02-10T18:26:43","Boot":31,"Core":"2_6_1","SDK":"2.2.2-dev(5ab15d1)","Hardware":"ESP8266EX","CR":"273/1151"}}
-            12:53:45 MQT: stat/basic/STATUS3 = {"StatusLOG":{"SerialLog":2,"WebLog":2,"MqttLog":0,"SysLog":0,"LogHost":"","LogPort":514,"SSId":["Roby",""],"TelePeriod":300,"Resolution":"558180C0","SetOption":["0000A009","2805C8000100060000005A00000000000000","00008000","00000000"]}}
-            12:53:45 MQT: stat/basic/STATUS4 = {"StatusMEM":{"ProgramSize":594,"Free":344,"Heap":23,"ProgramFlashSize":1024,"FlashSize":1024,"FlashChipId":"14405E","FlashMode":3,"Features":["00000809","8FDAE397","003683A0","22B617CD","01001BC0","00007881"],"Drivers":"1,2,3,4,5,6,7,8,9,10,12,16,18,19,20,21,22,24,26,29","Sensors":"1,2,3,4,5,6,7,8,9,10,14,15,17,18,20,22,26,34"}}
-            12:53:45 MQT: stat/basic/STATUS5 = {"StatusNET":{"Hostname":"basic-5911","IPAddress":"192.168.2.45","Gateway":"192.168.2.1","Subnetmask":"255.255.255.0","DNSServer":"192.168.2.190","Mac":"B4:E6:2D:3A:B7:17","Webserver":2,"WifiConfig":4}}
-            12:53:45 MQT: stat/basic/STATUS6 = {"StatusMQT":{"MqttHost":"192.168.2.190","MqttPort":1883,"MqttClientMask":"Basic","MqttClient":"Basic","MqttUser":"au190","MqttCount":1,"MAX_PACKET_SIZE":1000,"KEEPALIVE":30}}
-            12:53:45 MQT: stat/basic/STATUS7 = {"StatusTIM":{"UTC":"Mon May 03 11:53:45 2021","Local":"Mon May 03 12:53:45 2021","StartDST":"Sun Mar 28 02:00:00 2021","EndDST":"Sun Oct 31 03:00:00 2021","Timezone":"+01:00","Sunrise":"05:25","Sunset":"20:08"}}
-            12:53:45 MQT: stat/basic/STATUS10 = {"StatusSNS":{"Time":"2021-05-03T12:53:45"}}
-            12:53:45 MQT: stat/basic/STATUS11 = {"StatusSTS":{"Time":"2021-05-03T12:53:45","Uptime":"0T03:18:44","UptimeSec":11924,"Heap":24,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"POWER":"OFF","Wifi":{"AP":1,"SSId":"Roby","BSSId":"84:16:F9:D3:3C:80","Channel":2,"RSSI":64,"Signal":-68,"LinkCount":1,"Downtime":"0T00:00:06"}}}
-            12:55:13 MQT: tele/basic/STATE = {"Time":"2021-05-03T12:55:13","Uptime":"0T03:20:12","UptimeSec":12012,"Heap":24,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"POWER":"OFF","Wifi":{"AP":1,"SSId":"Roby","BSSId":"84:16:F9:D3:3C:80","Channel":2,"RSSI":60,"Signal":-70,"LinkCount":1,"Downtime":"0T00:00:06"}}
-
-
-            15:58:19 MQT: tele/basic/STATE = {"Time":"2021-05-05T15:58:19","Uptime":"0T05:20:13","UptimeSec":19213,"Heap":24,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":25,"MqttCount":1,"POWER":"OFF","Wifi":{"AP":1,"SSId":"Roby","BSSId":"84:16:F9:D3:3C:80","Channel":2,"RSSI":58,"Signal":-71,"LinkCount":1,"Downtime":"0T00:00:07"}}
-
-            My special hardware
-            08:42:48 --> tele/irrig/I = {"i":"192.168.2.40","m":"CC:50:E3:5B:8A:52","r":"74","a":"3.52","s":"Roby","v":"3","t":"2021-05-15T08:42:45","u":"00T00:10:04"}
-
-            '''
-            #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-            try:
-                if msg.payload[0] == "{":
-                    pL_o = json.loads(msg.payload)  # decode json data
-
-                    if self.my_hasattr_Idx(pL_o, 'StatusNET'):
-
-                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
-                        self._attrs['i'][t_topic].update({'IpAddress': pL_o['StatusNET']['IPAddress']})
-
-                    elif self.my_hasattr_Idx(pL_o, 'StatusSTS'):
-
-                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
-                        self._attrs['i'][t_topic].update({'SSId': pL_o['StatusSTS']['Wifi']['SSId'] + " (" + str(pL_o['StatusSTS']['Wifi']['RSSI']) + "%)"})
-                        self._attrs['i'][t_topic].update({'Uptime': pL_o['StatusSTS']['Uptime']})
-                        self._attrs['i'][t_topic].update({'Time': pL_o['StatusSTS']['Time']})
-
-                    elif self.my_hasattr_Idx(pL_o, 'Uptime'):
-
-                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
-                        self._attrs['i'][t_topic].update({'SSId': pL_o['Wifi']['SSId'] + " (" + str(pL_o['Wifi']['RSSI']) + "%)"})
-                        self._attrs['i'][t_topic].update({'Uptime': pL_o['Uptime']})
-                        self._attrs['i'][t_topic].update({'Time': pL_o['Time']})
-
-                    elif self.my_hasattr_Idx(pL_o, 'i'):# My special hardware
-
-                        t_topic = self.conv_power_to_pulseTime(3, msg.topic)
-                        self._attrs['i'][t_topic].update({'IpAddress': pL_o['i']})
-                        self._attrs['i'][t_topic].update({'SSId': pL_o['s'] + " (" + str(pL_o['r']) + "%)"})
-                        self._attrs['i'][t_topic].update({'Uptime': pL_o['u']})
-                        self._attrs['i'][t_topic].update({'Time': pL_o['t']})
-
-
-                    self.myasync_write_ha_state()
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-
-        @callback
-        def state_message_available(msg: Message) -> None:
-            '''
-                tele/basic/LWT = Online (retained)
-            '''
-            _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", msg)
-            try:
-                if msg.payload == self._config[CONF_PAYLOAD_AVAILABLE]:
-                    t_topic = self.conv_power_to_pulseTime(3, msg.topic)
-                    self._attrs['i'][t_topic].update({'available': True})
-                elif msg.payload == self._config[CONF_PAYLOAD_NOT_AVAILABLE]:
-                    t_topic = self.conv_power_to_pulseTime(3, msg.topic)
-                    self._attrs['i'][t_topic].update({'available': False})
-
-
-                self._attrs['_state'] = True #State of the Irrigation
-                for item in self._attrs['i']:
-                    #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "] [%s][%s]", item, self._attrs['i'][item]['available'])
-
-                    if self.my_hasattr_Idx(self._attrs['i'][item], 'available'):
-                        if not self._attrs['i'][item]['available']:
-                            self._attrs['_state'] = False
-
-                            t_topic = item
-                            self._attrs['i'][t_topic].update({'IpAddress': 'Unavailable'})
-                            self._attrs['i'][t_topic].update({'SSId': 'Unavailable'})
-                            self._attrs['i'][t_topic].update({'Uptime': 'Unavailable'})
-                            self._attrs['i'][t_topic].update({'Time': 'Unavailable'})
-
-
-                self.myasync_write_ha_state()
-
-            except Exception as e:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
-
-
-
-
-
-        '''
-        --------------------------------------------------------------------------------------------------------------------------------------
-            
-            Set listeners
-            
-            Cannot use the same topic for multiple functions !!!
-            
-        --------------------------------------------------------------------------------------------------------------------------------------
-        '''
-
-        for item in self._irrigation["state_topics"]:
-            if not add_subscription(topics, item, state_message_zone):
-                return False
-
-        for item in self._irrigation["state_pulse_times"]:
-            if not add_subscription(topics, item, state_message_pulsetime):
-                return False
-
-        for idx in range(self.no_of_md):
-            item = self.md_stat[idx]
-            fc = eval("state_message_md_"+ str(idx))
-            if not add_subscription(topics, item, fc):
-                return False
-
-        if self.m_stat is not None:
-            tmsg = self.conv_power_to_pulseTime(2, self.m_cmnd)
-            self._publish(tmsg, 0)       #Send the pulsetime = 0 if before was set
-            if not add_subscription(topics, self.m_stat, state_message_enable_motor):
-                return False
-
-        if self._config.get(CONF_M_POWER_STAT) is not None:
-            if not add_subscription(topics, self._config.get(CONF_M_POWER_STAT), state_message_motor_power):
-                return False
-
-
-        if self._config.get(CONF_WATERLIM_STAT) is not None:
-            if not add_subscription(topics, self._config.get(CONF_WATERLIM_STAT), state_message_waterLim):
-                return False
-
-        if self._config.get(CONF_RAINLIM_STAT) is not None:
-            if not add_subscription(topics, self._config.get(CONF_RAINLIM_STAT), state_message_rainLim):
-                return False
-
-
-        for item in self._irrigation["state_info"]:
-            add_subscription(topics, item, state_message_info)
-
-
-        for item in self._irrigation["state_available"]:
-            add_subscription(topics, item, state_message_available)
-
-
-
-        self._sub_state = await subscription.async_subscribe_topics(self.hass, self._sub_state, topics)
-        return True
-
-    async def async_will_remove_from_hass(self):
-        """Unsubscribe when removed."""
-        self._sub_state = await subscription.async_unsubscribe_topics(self.hass, self._sub_state)
-        await MqttAttributes.async_will_remove_from_hass(self)
-
-
+    '''
+    '''
     @property
     def state_attributes(self):
         """Return the optional state attributes."""
-        #self._attrs["time"] = time.time() #if no change in the attr - no event in the client
         #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> %s", self._attrs)
         return self._attrs
-
-    @property
-    def should_poll(self):
-        """Return the polling state."""
-        return False
-
-    @property
-    def name(self):
-        """Return the name of the irrigation."""
-        return self._config[CONF_NAME]
-
-    @property
-    def is_on(self):
-        """Return true if device is on."""
-        #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> %s", self._state)
-        return self._state
-
-    @property
-    def assumed_state(self):
-        """Return true if we do optimistic updates."""
-        return False
-
-    @property
-    def unique_id(self):
-        """Return a unique ID."""
-        return self._unique_id
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return self._config.get(CONF_ICON)
-
-    @property
-    def available(self) -> bool:
-        '''
-            Return if the device is available.
-
-            Force to true I need the attr message
-        '''
-        #return self._available
-        return True
 
     async def async_turn_on(self, **kwargs):
         None
 
     '''
         Turn on the Irrigation zone - min turn on is 10 sec
-        
+
         kwargs  - zone
                 - pulsetime - if missing using from config
-    
+
     '''
     async def async_my_turn_on(self, **kwargs):
         """
@@ -1014,32 +993,17 @@ class Au190_MqttIrrigation(
         Optimistic mode
     '''
     def async_turn_off_all_zones(self, zone_idx):
-        was_on = False
+        #was_on = False
         idx = 0
         for zone_id in self._attrs["au190"]["status"]:
             if zone_id != self._config[CONF_PAYLOAD_OFF] and idx != zone_idx:
-                was_on = True
+                #was_on = True
                 self._publish(self._irrigation["command_topics"][idx], self._config[CONF_PAYLOAD_OFF])
                 #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s]", idx, id)
             idx = idx + 1
 
         #if was_on: #time delay between on and off
             #await asyncio.sleep(0.5) #second
-
-    def _publish(self, topic, payload):
-
-        #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s]", topic, payload)
-        try:
-            mqtt.async_publish(
-                self.hass,
-                topic,
-                payload,
-                self._config[CONF_QOS],
-                self._config[CONF_RETAIN],
-            )
-
-        except Exception as e:
-            _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
     '''
         allways_on - If true, allways turn ON the zone (output)
@@ -1054,7 +1018,7 @@ class Au190_MqttIrrigation(
 
         await self.async_my_turn_on(**kwargs)
 
-    async def _async_wake_up(self, acction_time):
+    async def _scheduler_wake_up(self, acction_time):
         try:
             _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", acction_time)
 
@@ -1069,14 +1033,14 @@ class Au190_MqttIrrigation(
 
             if id != None:
                 '''
-                
+
                   Automatic irrigation
 
                   1.  If irrig_sys_status enabled
                   1.  If spesific weekday and
                   2.  If WaterL ok and
-                  3.  If RainL ok 
-                  
+                  3.  If RainL ok
+
                 '''
                 if (self._irrigation["au190"]['irrig_sys_status'] == 1 and
                     self._attrs["au190"]["irrigdays"][datetime.datetime.now().weekday()] and
@@ -1093,9 +1057,9 @@ class Au190_MqttIrrigation(
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
     '''
-        
+
         Automatic irrigation scheduler
-        
+
     '''
     async def _setSchedulerTask(self):
         try:
@@ -1133,7 +1097,7 @@ class Au190_MqttIrrigation(
 
 
                             #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "] - [Zone%s][%s][%s:%s:%s]", (id), previous_run, starttime.hour, starttime.minute, starttime.second)
-                            fc_listener = async_track_time_change(self.hass, self._async_wake_up, hour=starttime.hour, minute=starttime.minute, second=starttime.second)
+                            fc_listener = async_track_time_change(self.hass, self._scheduler_wake_up, hour=starttime.hour, minute=starttime.minute, second=starttime.second)
                             self._irrigation["au190"]["scheduler_Fc"].append({"start_time": starttime, "id": id, "fc_listener": fc_listener})
 
                             previous_id = id
@@ -1151,7 +1115,7 @@ class Au190_MqttIrrigation(
                 1.  If irrig_sys_status enabled 1 or 3
                 2.  If enabled enable_motorRunningToL and enable_protection and
                 3.  If Motor status changed
-                4.  
+                4.
             '''
             if ( (self._irrigation["au190"]['irrig_sys_status'] == 1 or self._irrigation["au190"]['irrig_sys_status'] == 3 ) and
                 self._attrs["au190"]["enable_motorRunningToL"] and self._attrs["au190"]["enable_protection"] and
@@ -1169,14 +1133,15 @@ class Au190_MqttIrrigation(
 
                     starttime = datetime.datetime.now() + datetime.timedelta(seconds=duration)
 
-                    fc_listener = async_track_time_change(self.hass, self._enable_irrigation_system(2), hour=starttime.hour, minute=starttime.minute, second=starttime.second)
+                    fc_listener = async_track_time_change(self.hass, self._enable_irrigation_system_h, hour=starttime.hour, minute=starttime.minute, second=starttime.second)
                     self._irrigation["au190"]["motorRunningToL_Fc"] = fc_listener
 
-                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###1### motorRunningToLong [%s][%s]", self._attrs["au190"], starttime)
+                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ##### MotorRunningToLong [%s][%s]", self._attrs["au190"], starttime)
 
                 else:
                     await self._clear_motorRunningToLFc()
-                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###0### motorRunningToLong [%s]", self._attrs["au190"])
+                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> #####*** MotorRunningToLong OK [%s]", self._attrs["au190"])
+
 
             self._irrigation["au190"]["motorPower"] = self._attrs["au190"]["motorPower"]
             self.myasync_write_ha_state()
@@ -1189,7 +1154,7 @@ class Au190_MqttIrrigation(
         try:
             '''
               zone starts with index 0
-              
+
               md_on_time = in Esp special secconds - min value 10 sec max vaule is 10 min
 
               1.  If irrig_sys_status enabled
@@ -1217,7 +1182,7 @@ class Au190_MqttIrrigation(
                     '''
                        Count the ON status in 5 min interval
                        if the count is > x disable that Md on that zome
-                       else reset the counter 
+                       else reset the counter
                     '''
 
                     if self._time_duration(self._irrigation["au190"]["md_status"][zone]["time"], datetime.datetime.now()) > MD_TIME_INTERVAL:
@@ -1241,15 +1206,15 @@ class Au190_MqttIrrigation(
     async def _md_update_scheduled_on(self):
         try:
             '''
-               Update if running the Scheduled watering 
-               
+               Update if running the Scheduled watering
+
             '''
             if not self._irrigation["au190"]['scheduled_w_status']['on']:
 
                 self._irrigation["au190"]['scheduled_w_status']['on'] = True
 
                 # Calculate all zones duration
-                idx = 0
+                #idx = 0
                 duration = 0
                 for id in range(len(self._attrs["au190"]["enable_zone"])):
                     if self._attrs["au190"]["enable_zone"][id]:
@@ -1281,7 +1246,7 @@ class Au190_MqttIrrigation(
 
     '''
         Enable Disable the Motor == Enable Disable system
-        Enable system is depends on this event - If this is not in use, not specified in config yaml we need to call the specific function. 
+        Enable system is depends on this event - If this is not in use, not specified in config yaml we need to call the specific function.
 
         data = DEFAULT_PAYLOAD_ON
         data = DEFAULT_PAYLOAD_OFF
@@ -1300,11 +1265,12 @@ class Au190_MqttIrrigation(
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
+
     '''
         Logic for ON|OFF of the Irrigation system
-    
+
         Enable Disable the Motor == Enable Disable system
-        
+
         Motor ON or OFF is just enable disable to run the motor.
         If the motor is running I get that info form the motor current consumption.
 
@@ -1320,7 +1286,7 @@ class Au190_MqttIrrigation(
 
             self._irrigation["au190"]['irrig_sys_status'] = self._attrs["au190"]['irrig_sys_status']
 
-            if self._attrs["au190"]['irrig_sys_status'] == 1:  # ok
+            if self._attrs["au190"]['irrig_sys_status'] == 1:  # Manual turn ON, ok
 
                 # --------------------------------------------------------------------------------------------------------------------------------------
                 #   Manual enable, reset all vars to default
@@ -1349,9 +1315,11 @@ class Au190_MqttIrrigation(
 
             #elif self._attrs["au190"]['irrig_sys_status'] == 0 or self._attrs["au190"]['irrig_sys_status'] == 2:  # manual turn off or error turn off
 
+            self.myasync_write_ha_state()
 
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
+
 
     async def _waterLim_logic(self):
         try:
@@ -1359,10 +1327,10 @@ class Au190_MqttIrrigation(
               WaterL
               waterLimTout = in secconds - min value 1 min
 
-              1.  If irrig_sys_status 1 or 3 
+              1.  If irrig_sys_status 1 or 3
               1.  If enabled enable_waterL and enable_protection and
               2.  If WaterL status changed
-              3.  
+              3.
             '''
             if ( (self._irrigation["au190"]['irrig_sys_status'] == 1 or self._irrigation["au190"]['irrig_sys_status'] == 3) and
                 self._attrs["au190"]["enable_waterL"] and self._attrs["au190"]["enable_protection"] and
@@ -1376,7 +1344,7 @@ class Au190_MqttIrrigation(
                     await self._clear_WaterL_Fc()
                     self._attrs["au190"]["waterLimLogic"] = True
 
-                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###1### WaterL_suspended [%s]", self._attrs["au190"])
+                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ##### WaterL_suspended [%s]", self._attrs["au190"])
 
                 else:
 
@@ -1388,14 +1356,13 @@ class Au190_MqttIrrigation(
 
                     starttime = datetime.datetime.now() + datetime.timedelta(seconds=duration)
 
-                    fc_listener = async_track_time_change(self.hass, self._enable_SuspendedWaterLim(DEFAULT_PAYLOAD_ON), hour=starttime.hour, minute=starttime.minute, second=starttime.second)
+                    fc_listener = async_track_time_change(self.hass, self._enable_SuspendedWaterLim, hour=starttime.hour, minute=starttime.minute, second=starttime.second)
                     self._irrigation["au190"]["WaterL_Fc"] = fc_listener
 
-                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###0### WaterL_suspended [%s]", self._attrs["au190"])
-
-
                 self._irrigation["au190"]["waterLim"] = self._attrs["au190"]["waterLim"]
+
             self.myasync_write_ha_state()   #Show the sensor status on client even if disabled
+
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
@@ -1408,8 +1375,8 @@ class Au190_MqttIrrigation(
 
               1.  If irrig_sys_status enabled
               1.  If enabled enable_rainL and enable_protection and
-              2.  
-              3.  
+              2.
+              3.
             '''
             if (self._irrigation["au190"]['irrig_sys_status'] == 1 and
                 self._attrs["au190"]["enable_rainL"] and self._attrs["au190"]["enable_protection"]
@@ -1421,6 +1388,8 @@ class Au190_MqttIrrigation(
 
                     await self._clear_RainL_Fc()
                     self._attrs["au190"]["rainLimLogic"] = self._attrs["au190"]["rainLim"]
+
+                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ##### RainLim_suspended [%s]", self._attrs["au190"])
 
                 elif (self._attrs["au190"]["rainLim"] != RAIN_LIMIT_ON and self._attrs["au190"]["rainLimLogic"] != RAIN_LIMIT_ON): #Everithing is ok
 
@@ -1436,13 +1405,11 @@ class Au190_MqttIrrigation(
 
                     starttime = datetime.datetime.now() + datetime.timedelta(seconds=duration)
 
-                    fc_listener = async_track_time_change(self.hass, self._RainL_ok(), hour=starttime.hour, minute=starttime.minute, second=starttime.second)
-                    self._irrigation["au190"]["rainLimTout"] = fc_listener
-
-                    _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###0### rainLim_countDown [%s]", self._attrs["au190"])
-
+                    fc_listener = async_track_time_change(self.hass, self._RainL_ok, hour=starttime.hour, minute=starttime.minute, second=starttime.second)
+                    self._irrigation["au190"]["RainL_Fc"] = fc_listener
 
             self.myasync_write_ha_state()
+
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
@@ -1485,7 +1452,7 @@ class Au190_MqttIrrigation(
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
     '''
-    
+
     '''
     async def _check_md_times(self):
 
@@ -1502,18 +1469,21 @@ class Au190_MqttIrrigation(
             return False
 
     '''
-    
+
         data - ON
-         
+
     '''
-    async def _enable_SuspendedWaterLim(self, data):
+    async def _enable_SuspendedWaterLim(self, acction_time):
         try:
+            _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s]", acction_time)
 
             if self._irrigation["au190"]['irrig_sys_status'] == 3:
 
-                await self._enable_Motor(data)
+                await self._enable_Motor(DEFAULT_PAYLOAD_ON)
                 self._attrs["au190"]["waterLimLogic"] = False
                 await self._clear_WaterL_Fc()
+
+                _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> #####*** WaterL_suspended OK [%s]", self._attrs["au190"])
 
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
@@ -1521,6 +1491,15 @@ class Au190_MqttIrrigation(
     '''
         Enable/Disable Irrigation system
 
+    '''
+    async def _enable_irrigation_system_h(self, acction_time):
+        await self._enable_irrigation_system(2)
+
+    '''
+    data    0   - Turn off Manual
+            1   - Turn on Manual
+            2   - Turn off Motor running too long
+            3   - Turn off for while Water Lim
     '''
     async def _enable_irrigation_system(self, data):
 
@@ -1539,27 +1518,29 @@ class Au190_MqttIrrigation(
             await self._enable_Motor(DEFAULT_PAYLOAD_OFF)
 
             if data == 2:
-                _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> ### Motor running too long !")
+                _LOGGER.error("[" + sys._getframe().f_code.co_name + "]--> ##### MotorRunningToLong - Motor running too long !")
 
     '''
 
     '''
-    async def _RainL_ok(self):
+    async def _RainL_ok(self, acction_time):
         try:
+
             self._attrs["au190"]["rainLimLogic"] = not RAIN_LIMIT_ON #RainL is ok
             self.myasync_write_ha_state()
 
             await self._clear_RainL_Fc()
 
-            _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> ###1### rainLim_countDown ok [%s]", self._attrs["au190"])
+            _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> #####*** RainLim_suspended OK [%s]", self._attrs["au190"])
+
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
     '''
         Load data form file or default data
-    
+
     '''
-    async def _load_config(self):
+    async def _load_from_file(self):
         """Load data from a file or return None."""
         try:
             #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s]", self.entity_id, self._filename)
@@ -1582,67 +1563,62 @@ class Au190_MqttIrrigation(
             if self._irrigation["au190"]["enable_md"] != self._attrs["au190"]["enable_md"]:
                 self._irrigation["au190"]["enable_md"] = self._attrs["au190"]["enable_md"]
 
-                if self._attrs["au190"]["enable_md"]:
-                    self._irrigation["au190"]["md_status"] = []
-                    self._attrs["au190"]["md_status"] = []
-                    for idx in range(self.no_of_md):
-                        self._irrigation["au190"]["md_status"].append({"count": 0,"time": datetime.datetime.now()})  # Count the Md ON status in an interval of time
-                        self._attrs["au190"]["md_status"].append(False)  # True False 2-Suspended
+                self._irrigation["au190"]["md_status"] = []
+                self._attrs["au190"]["md_status"] = []
+                for idx in range(self.no_of_md):
+                    self._irrigation["au190"]["md_status"].append({"count": 0,"time": datetime.datetime.now()})  # Count the Md ON status in an interval of time
+                    self._attrs["au190"]["md_status"].append(False)  # True False 2-Suspended
+
 
             '''
-                 Update Protection logic reset if turned form OFF -> ON 
+                 Update Protection logic reset if turned form OFF -> ON
             '''
             if self._irrigation["au190"]["enable_protection"] != self._attrs["au190"]["enable_protection"]:
                 self._irrigation["au190"]["enable_protection"] = self._attrs["au190"]["enable_protection"]
 
-                if self._irrigation["au190"]["enable_protection"]:
+                await self._clear_motorRunningToLFc()
+                self._irrigation["au190"]["motorPower"] = False
+                await self._motorRunningToL_logic()  # has to be run again to check if the motor is running
+
+                self._irrigation["au190"]["waterLim"] = False
+                self._attrs["au190"]["waterLimLogic"] = False
+                await self._clear_WaterL_Fc()
+                await self._waterLim_logic()  # has to be run again to check if there is water
+
+                self._attrs["au190"]["rainLimLogic"] = False
+                await self._clear_RainL_Fc()
+
+            else:
+
+                '''
+                    Update Motor Running too long logic reset if turned form OFF -> ON
+                '''
+                if self._irrigation["au190"]["enable_protection"] and self._irrigation["au190"]["enable_motorRunningToL"] != self._attrs["au190"]["enable_motorRunningToL"]:
+                    self._irrigation["au190"]["enable_motorRunningToL"] = self._attrs["au190"][ "enable_motorRunningToL"]
 
                     await self._clear_motorRunningToLFc()
                     self._irrigation["au190"]["motorPower"] = False
                     await self._motorRunningToL_logic()  # has to be run again to check if the motor is running
+
+                '''
+                   Update Water limit logic reset if turned form OFF -> ON
+                '''
+                if self._irrigation["au190"]["enable_protection"] and self._irrigation["au190"]["enable_waterL"] != self._attrs["au190"]["enable_waterL"]:
+                    self._irrigation["au190"]["enable_waterL"] = self._attrs["au190"][ "enable_waterL"]
 
                     self._irrigation["au190"]["waterLim"] = False
                     self._attrs["au190"]["waterLimLogic"] = False
                     await self._clear_WaterL_Fc()
                     await self._waterLim_logic()  # has to be run again to check if there is water
 
-                    self._attrs["au190"]["rainLimLogic"] = False
-                    await self._clear_RainL_Fc()
-
-            else:
-
                 '''
-                    Update Motor Running too long logic reset if turned form OFF -> ON 
-                '''
-                if self._irrigation["au190"]["enable_protection"] and self._irrigation["au190"]["enable_motorRunningToL"] != self._attrs["au190"]["enable_motorRunningToL"]:
-                    self._irrigation["au190"]["enable_motorRunningToL"] = self._attrs["au190"][ "enable_motorRunningToL"]
-
-                    if self._irrigation["au190"]["enable_motorRunningToL"]:
-                        await self._clear_motorRunningToLFc()
-                        self._irrigation["au190"]["motorPower"] = False
-                        await self._motorRunningToL_logic()  # has to be run again to check if the motor is running
-
-                '''
-                   Update Water limit logic reset if turned form OFF -> ON 
-                '''
-                if self._irrigation["au190"]["enable_protection"] and self._irrigation["au190"]["enable_waterL"] != self._attrs["au190"]["enable_waterL"]:
-                    self._irrigation["au190"]["enable_waterL"] = self._attrs["au190"][ "enable_waterL"]
-
-                    if self._irrigation["au190"]["enable_waterL"]:
-                        self._irrigation["au190"]["waterLim"] = False
-                        self._attrs["au190"]["waterLimLogic"] = False
-                        await self._clear_WaterL_Fc()
-                        await self._waterLim_logic()  # has to be run again to check if there is water
-
-                '''
-                   Update Rain limit logic reset if turned form OFF -> ON 
+                   Update Rain limit logic reset if turned form OFF -> ON
                 '''
                 if self._irrigation["au190"]["enable_protection"] and self._irrigation["au190"]["enable_rainL"] != self._attrs["au190"]["enable_rainL"]:
                     self._irrigation["au190"]["enable_rainL"] = self._attrs["au190"]["enable_rainL"]
 
-                    if self._irrigation["au190"]["enable_rainL"]:
-                        self._attrs["au190"]["rainLimLogic"] = False
-                        await self._clear_RainL_Fc()
+                    self._attrs["au190"]["rainLimLogic"] = False
+                    await self._clear_RainL_Fc()
 
             '''
                  Update Manual - Enable/Disable Irrigation system
@@ -1678,11 +1654,11 @@ class Au190_MqttIrrigation(
     def my_hasattr(self, o, k):
         try:
             # log.info("my_hasattr________:[" + str(o) + "][" + str(k) + "]")
-            t = o[k]
+            o[k]
             # log.info("my_hasattr___x___:[" + str(o) + "][" + str(k) + "]")
             return True
 
-        except Exception as e:
+        except Exception:
             return False
 
 
@@ -1706,7 +1682,7 @@ class Au190_MqttIrrigation(
                     ret = key
                     # log.info('---x---[' + key + ']=' + o[key])
 
-        except Exception as e:
+        except Exception:
             return False
         return ret
 
@@ -1727,7 +1703,7 @@ class Au190_MqttIrrigation(
 
 
     '''
-       Force HA to send the status msg 
+       Force HA to send the status msg
 
        must be: FMT = '%Y-%m-%dT%H:%M:%S.%f'
     '''
@@ -1739,26 +1715,26 @@ class Au190_MqttIrrigation(
 
     '''
         Create PulseTime msg form Power msg
-        
-        fc = 1 
+
+        fc = 1
             Needs to identify the Pulstime response
             "stat/basic/POWER1" -> "'stat/basic/RESULT/PulseTime1'"
             "stat/basic/POWER2" -> "stat/basic/RESULT/PulseTime2"
-            
-            "stat/basic/POWER" -> "stat/basic/RESULT/PulseTime1" 
+
+            "stat/basic/POWER" -> "stat/basic/RESULT/PulseTime1"
         fc = 2
             "stat/basic/POWER1" -> "'stat/basic/PulseTime1'"
             "stat/basic/POWER2" -> "stat/basic/PulseTime2"
-            
+
             "stat/basic/POWER" -> "stat/basic/PulseTime1"
-            
-        fc = 3 
+
+        fc = 3
             Get the topic from msg
-            
+
             "stat/basic/POWER" -> "stat/basic/PulseTime1"
-            
+
             return basic
-            
+
     '''
     def conv_power_to_pulseTime(self, fc, msg):
         try:
@@ -1792,15 +1768,15 @@ class Au190_MqttIrrigation(
                 if len(v) == 3:
                     ret = v[1]
 
-            return ret;
+            return ret
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
     '''
         Return data True or False
-        
+
         Accepted Input values  = 'true', '1', 'yes', 'on' 'false', '0', 'no', 'off'
-        
+
     '''
     def convToBool(self, data):
         try:
@@ -1812,7 +1788,7 @@ class Au190_MqttIrrigation(
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
 
     '''
-        
+
         Can be any integer or float number
         Returns True is string is a number.
     '''
@@ -1820,13 +1796,13 @@ class Au190_MqttIrrigation(
         return n.replace('.', '', 1).isdigit()
 
     '''
-    
+
         If time is between to times ?
         end_day = '23:59:59'
         end_day = '23:59'
 
         FMT = '%Y-%m-%dT%H:%M:%S.%f'
-        
+
         x = _is_time_between('08:00:00', '07:00:00', '08:00:00', '23:59:59')
         x = _is_time_between('08:00:00', '21:00:00', '06:00:00', '23:59:59')
         x = _is_time_between('08:00:00', '02:00:00', '22:00:00', '23:59:59')
@@ -1875,7 +1851,7 @@ class Au190_MqttIrrigation(
         0 / OFF = disable use of PulseTime for Relay<x>
         1..111 = set PulseTime for Relay<x> in 0.1 second increments
         112..64900 = set PulseTime for Relay<x>, offset by 100, in 1 second increments. Add 100 to desired interval in seconds, e.g., PulseTime 113 = 13 seconds and PulseTime 460 = 6 minutes (i.e., 360 seconds)
-        
+
         Sec - Tasmota Sec
         0   -   0,1
         1   -   10
@@ -1930,7 +1906,7 @@ class Au190_MqttIrrigation(
 
                 '''
                 await self._save_to_file(kwargs["au190"])
-                await self._load_config()
+                await self._load_from_file()
                 self.myasync_write_ha_state()
 
             elif (fc == 3):

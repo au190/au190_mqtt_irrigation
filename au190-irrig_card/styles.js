@@ -204,16 +204,19 @@ width: 20px;
 {
 color: var(--primary-color);
 font-weight: bold;
+cursor: pointer;
 }
 
 .off,.OFF,.false
 {
 color: #808080;
+cursor: pointer;
 }
 
 .g
 {
 color: green;
+cursor: pointer;
 }
 
 .error
@@ -283,6 +286,7 @@ margin-inline-end: 0px;
 .c_icon
 {
 display: inline-block;
+cursor: pointer;
 width: 40px;
 height: 40px;
 outline: none;

@@ -160,7 +160,7 @@ function _evC(o){
       el = document.getElementById('sch_en');
       el.removeAttribute('class');
       el.classList.add('ck');
-      el.classList.add(o.attributes.au190.enable_scheduler);
+      el.classList.add(o.attributes.au190.enable_scheduler);  
 
       el = document.getElementById('sch_tab');
       el.removeAttribute('class');
@@ -177,7 +177,7 @@ function _evC(o){
       <div class='m'>
           <div class='t1'>Start time${(parseInt(idx) + 1)}</div>
           <div class='t1'><input type='time' id='schtime_${(idx)}' class='ch_id' step='1' value='${o.attributes.au190.scheduler[idx]}'></div>
-          <paper-icon-button id='schdel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></paper-icon-button>
+          <ha-icon id='schdel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></ha-icon>
         </div>
       `).join('');
 
@@ -206,7 +206,7 @@ function _evC(o){
         <div class='m'>
           <div class='t1'><input type='time' id='mdsttime_${(idx)}' class='ch_id' step='1' value='${o.attributes.au190.md[idx].start_time}'></div>
           <div class='t1'><input type='time' id='mdentime_${(idx)}' class='ch_id' step='1' value='${o.attributes.au190.md[idx].end_time}'></div>
-          <paper-icon-button id='mddel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></paper-icon-button>
+          <ha-icon id='mddel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></ha-icon>
         </div>
       `).join('');
 
@@ -464,7 +464,7 @@ function _openProp(o, c){
   dlg.innerHTML = `
     <div class='mw'>
       <div class='menu1'>
-        <paper-icon-button icon='mdi:close' id='c_w' class='ck d_icon clickable' role='button' tabindex='0' aria-disabled='false'></paper-icon-button>
+        <ha-icon icon='mdi:close' id='c_w' class='ck d_icon clickable' role='button' tabindex='0' aria-disabled='false'></ha-icon>
         <div id='name' class='d_title'>${o.name}</div>
       </div>
       <div class='wr_dlg'>
@@ -475,14 +475,14 @@ function _openProp(o, c){
         <div class='m1'>
           <div class='t3'>Irrigation system</div>
           <div class='t1'></div>
-          <paper-icon-button id='btn_sys' class='ck ${ir_st}' icon=${'mdi:power'}></paper-icon-button>
+          <ha-icon id='btn_sys' class='ck ${ir_st}' icon=${'mdi:power'}></ha-icon>
         </div>
         <div id='irig_system_tab' class='${tab_1}'>
           ${Object.keys(o.stateObj.attributes.au190.pulsetime).map(idx => `
             <div class='m'>
               <div class='t1'>Zone${(parseInt(idx) + 1)}</div>
               <div class='t1'><input type='time' id='pulsetime_${(idx)}' class='ch_id' step='1' value='${_cfc(1, o.stateObj.attributes.au190.pulsetime[idx])}'></div>
-              <paper-icon-button id='enzone_${(idx)}' class='ck_id ${o.stateObj.attributes.au190.enable_zone[idx]}' icon=${'mdi:power'}></paper-icon-button>
+              <ha-icon id='enzone_${(idx)}' class='ck_id ${o.stateObj.attributes.au190.enable_zone[idx]}' icon=${'mdi:power'}></ha-icon>
             </div>
           `).join('')}
           <div class='m'>
@@ -491,7 +491,7 @@ function _openProp(o, c){
           <div class='m1'>
             <div class='t3'>Scheduler</div>
             <div class='t1'></div>
-            <paper-icon-button id='sch_en' class='ck ${o.stateObj.attributes.au190.enable_scheduler}' icon=${'mdi:power'}></paper-icon-button>
+            <ha-icon id='sch_en' class='ck ${o.stateObj.attributes.au190.enable_scheduler}' icon=${'mdi:power'}></ha-icon>
           </div>
           <div id='sch_tab' class='${tab_2}'>
             <div class='m1 w_s'>
@@ -502,14 +502,14 @@ function _openProp(o, c){
             <div class='m'>
               <div class='t1'>Start time</div>
               <div class='t1'><input type='time' id='start_time' step='1' value='01:00'></div>
-              <paper-icon-button id='sch_add' class='ck g' icon=${'mdi:plus-box'}></paper-icon-button>
+              <ha-icon id='sch_add' class='ck g' icon=${'mdi:plus-box'}></ha-icon>
             </div>
             <div id='sch_da'>
               ${Object.keys(o.stateObj.attributes.au190.scheduler).map(idx => `
                 <div class='m'>
                   <div class='t1'>Start time${(parseInt(idx) + 1)}</div>
                   <div class='t1'><input type='time' id='schtime_${(idx)}' class='ch_id' step='1' value='${o.stateObj.attributes.au190.scheduler[idx]}'></div>
-                  <paper-icon-button id='schdel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></paper-icon-button>
+                  <ha-icon id='schdel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></ha-icon>
                 </div>
               `).join('')}
             </div>
@@ -520,12 +520,12 @@ function _openProp(o, c){
           <div class='m1'>
             <div class='t3'>Md settings</div>
             <div class='t1'></div>
-            <paper-icon-button id='md_en' class='ck ${o.stateObj.attributes.au190.enable_md}' icon=${'mdi:power'}></paper-icon-button>
+            <ha-icon id='md_en' class='ck ${o.stateObj.attributes.au190.enable_md}' icon=${'mdi:power'}></ha-icon>
           </div>
           <div id='md_tab' class='${tab_3}'>
             <div class='m1'>
               ${Object.keys(o.stateObj.attributes.au190.md_status).map(idx => `
-                <paper-icon-button id='md_${(idx)}' class='${o.stateObj.attributes.au190.md_status[idx]}' icon=${'mdi:motion-sensor'}></paper-icon-button>
+                <ha-icon id='md_${(idx)}' class='${o.stateObj.attributes.au190.md_status[idx]}' icon=${'mdi:motion-sensor'}></ha-icon>
               `).join('')}
             </div>
             <div class='m'>
@@ -541,14 +541,14 @@ function _openProp(o, c){
             <div class='m'>
               <div class='t1'><input type='time' id='md_sttime' step='1' value='21:00'></div>
               <div class='t1'><input type='time' id='md_entime' step='1' value='07:00'></div>
-              <paper-icon-button id='md_add' class='ck g' icon=${'mdi:plus-box'}></paper-icon-button>
+              <ha-icon id='md_add' class='ck g' icon=${'mdi:plus-box'}></ha-icon>
             </div>
             <div id='md_da'>
               ${Object.keys(o.stateObj.attributes.au190.md).map(idx => `
                 <div class='m'>
                   <div class='t1'><input type='time' id='mdsttime_${(idx)}' class='ch_id' step='1' value='${o.stateObj.attributes.au190.md[idx].start_time}'></div>
                   <div class='t1'><input type='time' id='mdentime_${(idx)}' class='ch_id' step='1' value='${o.stateObj.attributes.au190.md[idx].end_time}'></div>
-                  <paper-icon-button id='mddel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></paper-icon-button>
+                  <ha-icon id='mddel_${(idx)}' class='ck_id false' icon=${'mdi:delete'}></ha-icon>
                 </div>
               `).join('')}
             </div>
@@ -559,28 +559,28 @@ function _openProp(o, c){
           <div class='m1'>
             <div class='t3'>Protection</div>
             <div class='t1'></div>
-            <paper-icon-button id='pro_en' class='ck ${o.stateObj.attributes.au190.enable_protection}' icon=${'mdi:power'}></paper-icon-button>
+            <ha-icon id='pro_en' class='ck ${o.stateObj.attributes.au190.enable_protection}' icon=${'mdi:power'}></ha-icon>
           </div>
           <div id='pro_tab' class='${tab_4}'>
             <div class='m'>
-              <paper-icon-button id='pro_motors' class='${o.stateObj.attributes.au190.motorPower}' icon=${'mdi:engine-outline'}></paper-icon-button>
-              <paper-icon-button id='pro_waterLs' class='${o.stateObj.attributes.au190.waterLim}' icon=${'mdi:water-pump-off'}></paper-icon-button>
-              <paper-icon-button id='pro_RainLs' class='${o.stateObj.attributes.au190.rainLim}' icon=${'mdi:weather-pouring'}></paper-icon-button>
+              <ha-icon id='pro_motors' class='${o.stateObj.attributes.au190.motorPower}' icon=${'mdi:engine-outline'}></ha-icon>
+              <ha-icon id='pro_waterLs' class='${o.stateObj.attributes.au190.waterLim}' icon=${'mdi:water-pump-off'}></ha-icon>
+              <ha-icon id='pro_RainLs' class='${o.stateObj.attributes.au190.rainLim}' icon=${'mdi:weather-pouring'}></ha-icon>
             </div>
             <div class='m'>
               <div class='t1'>MotorRunTout</div>
               <div class='t1'><input type='time' id='pro_motortime' class='ch_id' step='1' value='${_cfc(4, o.stateObj.attributes.au190.motorRunningTout)}'></div>
-              <paper-icon-button id='pro_enmotor' class='ck ${o.stateObj.attributes.au190.enable_motorRunningToL}' icon=${'mdi:power'}></paper-icon-button>
+              <ha-icon id='pro_enmotor' class='ck ${o.stateObj.attributes.au190.enable_motorRunningToL}' icon=${'mdi:power'}></ha-icon>
             </div>
             <div class='m'>
               <div class='t1'>WaterLimTout</div>
               <div class='t1'><input type='time' id='pro_waterL' class='ch_id' step='1' value='${_cfc(4, o.stateObj.attributes.au190.waterLimTout)}'></div>
-              <paper-icon-button id='pro_enwaterL' class='ck ${o.stateObj.attributes.au190.enable_waterL}' icon=${'mdi:power'}></paper-icon-button>
+              <ha-icon id='pro_enwaterL' class='ck ${o.stateObj.attributes.au190.enable_waterL}' icon=${'mdi:power'}></ha-icon>
             </div>
             <div class='m'>
               <div class='t1'>RainLimTout</div>
               <div class='t1'><input type='time' id='pro_rainL' class='ch_id' step='1' value='${_cfc(4, o.stateObj.attributes.au190.rainLimTout)}'></div>
-              <paper-icon-button id='pro_enrainL' class='ck ${o.stateObj.attributes.au190.enable_rainL}' icon=${'mdi:power'}></paper-icon-button>
+              <ha-icon id='pro_enrainL' class='ck ${o.stateObj.attributes.au190.enable_rainL}' icon=${'mdi:power'}></ha-icon>
             </div>
           </div>
         </div>
@@ -594,7 +594,7 @@ function _openProp(o, c){
         <div class='m1'>
           <div class='t3'>Info</div>
           <div></div>
-          <paper-icon-button id='btn_i' class='ck false' icon=${'mdi:refresh'}></paper-icon-button>
+          <ha-icon id='btn_i' class='ck false' icon=${'mdi:refresh'}></ha-icon>
         </div>
         <div id='inf'>
           ${Object.keys(o.stateObj.attributes.i).map(idx => `
@@ -673,17 +673,17 @@ class au190_IrrigCard extends HTMLElement {
       <ha-card class='m_c'>
         <div class='m'>
           <div id='name' class='c_title'>${this.name}</div>
-          <paper-icon-button icon='mdi:dots-vertical' id='m_1' class='c_icon off clickable' role='button' tabindex='0' aria-disabled='false'></paper-icon-button>
+          <ha-icon icon='mdi:dots-vertical' id='m_1' class='c_icon off clickable' role='button' tabindex='0' aria-disabled='false'></ha-icon>
         </div>
         <div id='btn_st' class='mst'>
         </div>
         <div class='sep'></div>
         <div class='mst'>
-          <paper-icon-button id='i_0' class='OFF' icon=${'mdi:engine-outline'}></paper-icon-button>
-					<paper-icon-button id='i_1' class='OFF' icon=${'mdi:water-pump-off'}></paper-icon-button>
-          <paper-icon-button id='i_2' class='OFF' icon=${'mdi:weather-pouring'}></paper-icon-button>
-					<paper-icon-button id='i_3' class='OFF' icon=${'mdi:motion-sensor'}></paper-icon-button>
-          <paper-icon-button id='i_4' class='OFF' icon=${'mdi:timetable'}></paper-icon-button>
+          <ha-icon id='i_0' class='OFF' icon=${'mdi:engine-outline'}></ha-icon>
+					<ha-icon id='i_1' class='OFF' icon=${'mdi:water-pump-off'}></ha-icon>
+          <ha-icon id='i_2' class='OFF' icon=${'mdi:weather-pouring'}></ha-icon>
+					<ha-icon id='i_3' class='OFF' icon=${'mdi:motion-sensor'}></ha-icon>
+          <ha-icon id='i_4' class='OFF' icon=${'mdi:timetable'}></ha-icon>
         </div>
         <div class='sep'></div>
         <div class='mst'>
@@ -808,6 +808,7 @@ class au190_IrrigCard extends HTMLElement {
 
   _updateButtons(root){
 
+    //console.log(this.stateObj.attributes);    
     try{
       _evC(this.stateObj);
     }catch{}
