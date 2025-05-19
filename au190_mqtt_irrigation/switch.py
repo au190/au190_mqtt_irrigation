@@ -400,7 +400,8 @@ class Au190_MqttIrrigation(MqttEntity, SwitchEntity, RestoreEntity):
                         '''
                             Send turn ON msg to the zone
                         '''
-                        self._publish(self._irrigation["command_topics"][idx], self._config[CONF_PAYLOAD_ON])
+                        #self._publish(self._irrigation["command_on_topics"][idx], self._config[CONF_PAYLOAD_ON]) # Old ON
+                        self._publish(self._irrigation["command_on_topics"][idx], self._irrigation["command_on_payload_topics"][idx])
                         self.myasync_write_ha_state()
                         # _LOGGER.debug("[" + sys._getframe().f_code.co_name + "]-x- [%s][%s]", idx, payload)
 
@@ -730,10 +731,12 @@ class Au190_MqttIrrigation(MqttEntity, SwitchEntity, RestoreEntity):
 
             self._attrs.update({'i': {}})                                           # For info
 
-            command_list = []
-            state_list = []
-
+            command_on_list = []
+            command_on_payload_list = []
+            command_off_list = []
             command_pulseTime_list = []
+
+            state_list = []
             state_pulseTime_list = []
             state_pulseTime_list_idx = []
 
@@ -748,18 +751,20 @@ class Au190_MqttIrrigation(MqttEntity, SwitchEntity, RestoreEntity):
 
             for idx in range(self.no_of_zones):
 
-                command_list.append(self.z_cmnd[idx])
-                state_list.append(self.z_stat[idx])
+                z_cmnd = self.z_cmnd[idx].split(" ")        # cmnd/irrig/PWMIR5 50
+                if len(z_cmnd) != 2:
+                    _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Command not good: " + str(self.z_cmnd[idx]))
 
-                '''
-                    Command PulseTime is working with cmnd/basic/PulseTime1
+                command_on_list.append(z_cmnd[0])           # cmnd/irrig/PWMIR5
+                command_on_payload_list.append(z_cmnd[1])   # 50
 
-                    10:21:38 CMD: PulseTime 10
-                    10:21:38 MQT: stat/basic/RESULT = {"PulseTime1":{"Set":10,"Remaining":10}}
-
-                '''
-                cmnd_pulseTime = self.z_cmnd[idx].replace("POWER", "PulseTime")
+                cmnd_pulseTime = z_cmnd[0].replace("PWMIR", "PulseTime")  # cmnd/irrig/PulseTime5
                 command_pulseTime_list.append(cmnd_pulseTime)
+
+                cmnd_off = z_cmnd[0].replace("PWMIR", "POWER")            # cmnd/irrig/POWER5
+                command_off_list.append(cmnd_off)
+
+                state_list.append(self.z_stat[idx])
 
                 '''
                     PulseTime payload message
@@ -837,7 +842,9 @@ class Au190_MqttIrrigation(MqttEntity, SwitchEntity, RestoreEntity):
                 #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s] [%s][%s]", idx, self.z_cmnd[idx], self.z_stat[idx])
 
 
-            self._irrigation.update({"command_topics": command_list})
+            self._irrigation.update({"command_on_topics": command_on_list})
+            self._irrigation.update({"command_on_payload_topics": command_on_payload_list})
+            self._irrigation.update({"command_off_topics": command_off_list})
             self._irrigation.update({"command_pulse_times": command_pulseTime_list})
             self._irrigation.update({"command_motor": self.m_cmnd})
             self._irrigation.update({"command_info": command_info_list})                    # Calculate events msg for info.
@@ -974,17 +981,19 @@ class Au190_MqttIrrigation(MqttEntity, SwitchEntity, RestoreEntity):
                     running_time = self._attrs["au190"]["pulsetime"][idx]
 
                 pulseTime = self._forceTimeLimit(running_time, 100)
-
+                self._publish(self._irrigation["command_pulse_times"][idx], pulseTime) # I want to send always the PulseTime
+                '''
                 if (self._irrigation["au190"]["pulsetime"][idx] != pulseTime):
 
                     self._publish(self._irrigation["command_pulse_times"][idx], pulseTime)
 
                 else:
                     #Just turn ON
-                    self._publish(self._irrigation["command_topics"][idx], self._config[CONF_PAYLOAD_ON])
+                    self._publish(self._irrigation["command_on_topics"][idx], self._config[CONF_PAYLOAD_ON])
+                '''
             else:
                 # Just turn OFF
-                self._publish(self._irrigation["command_topics"][idx], self._config[CONF_PAYLOAD_OFF])
+                self._publish(self._irrigation["command_off_topics"][idx], self._config[CONF_PAYLOAD_OFF])
 
         except Exception as e:
             _LOGGER.error("[" + sys._getframe().f_code.co_name + "] Exception: " + str(e))
@@ -998,7 +1007,7 @@ class Au190_MqttIrrigation(MqttEntity, SwitchEntity, RestoreEntity):
         for zone_id in self._attrs["au190"]["status"]:
             if zone_id != self._config[CONF_PAYLOAD_OFF] and idx != zone_idx:
                 #was_on = True
-                self._publish(self._irrigation["command_topics"][idx], self._config[CONF_PAYLOAD_OFF])
+                self._publish(self._irrigation["command_off_topics"][idx], self._config[CONF_PAYLOAD_OFF])
                 #_LOGGER.debug("[" + sys._getframe().f_code.co_name + "]--> [%s][%s]", idx, id)
             idx = idx + 1
 
