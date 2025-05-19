@@ -140,10 +140,10 @@ switch:
     name: "Irrigation"
     icon: mdi:power
     z_cmnd: [
-    "cmnd/irrig/POWER1",
-    "cmnd/irrig/POWER2",
-    "cmnd/irrig/POWER3",
-    "cmnd/irrig/POWER4"
+    "cmnd/irrig/PWMIR1",
+    "cmnd/irrig/PWMIR2",
+    "cmnd/irrig/PWMIR3",
+    "cmnd/irrig/PWMIR4"
     ]
     z_stat: [
     "stat/irrig/POWER1",
@@ -209,10 +209,10 @@ switch:
     name: "Irrigation"
     icon: mdi:power
     z_cmnd: [
-    "cmnd/basic/POWER",
-    "cmnd/irrig/POWER1",
-    "cmnd/irrig/POWER2",
-    "cmnd/irrig/POWER3",
+    "cmnd/basic/PWMIR",
+    "cmnd/irrig/PWMIR1",
+    "cmnd/irrig/PWMIR2",
+    "cmnd/irrig/PWMIR3",
     ]
     z_stat: [
     "stat/basic/POWER",
